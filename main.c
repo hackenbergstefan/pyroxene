@@ -71,7 +71,6 @@ typedef union
         uint16_t cmd;
         uint16_t length;
         uint8_t data[];
-
     } d;
     uint8_t buffer[1024];
 } uart_data_t;
@@ -106,6 +105,11 @@ void dispatcher(void)
 
         switch (__REV16(uart_data.d.cmd))
         {
+            case 0: // Echo
+            {
+                write_exact(uart_data.d.data, data_length);
+                break;
+            }
             case 1: // Read memory [address[4] len[4]]
             {
                 uintptr_t address = __REV(*(uintptr_t *)uart_data.d.data);
@@ -202,11 +206,24 @@ __attribute__((used, noinline)) uint32_t myfunc3(uint32_t x)
     return x + 1;
 }
 
+typedef struct
+{
+    uint32_t a;
+    uint32_t b;
+} mystruct_t;
+
+__attribute__((used, noinline)) uint32_t myfunc4(mystruct_t *x)
+{
+    return x->a + x->b;
+}
+
 int main(void)
 {
     myfunc1();
     myfunc2();
     myfunc3(41);
+    mystruct_t s;
+    myfunc4(&s);
 
     cy_rslt_t result;
 

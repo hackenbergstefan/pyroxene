@@ -1,3 +1,5 @@
+import struct
+
 import pygdbmi
 import pygdbmi.gdbcontroller
 
@@ -24,6 +26,7 @@ def main():
         ),
         proxy.GtiSerialProxy("/dev/ttyACM0", 576000),
     )
+
     # Demo variable read and write
     libproxy.scratch_buffer[0:16] = 16 * b"\xff"
     print(libproxy.scratch_buffer[0:32])
@@ -35,7 +38,14 @@ def main():
     pprint(libproxy.myfunc2())
     pprint(libproxy.myfunc3(43))
 
+    print(libproxy.scratch_buffer._addr)
+
+    mystruct = libproxy._new(typename="mystruct_t", addr=libproxy.scratch_buffer._addr)
+    mystruct.a = struct.pack("<I", 7)
+    mystruct.b = struct.pack("<I", 8)
     print(libproxy.scratch_buffer[0:32])
+    print(mystruct.a)
+    print(mystruct.b)
 
 
 def gdbmi():

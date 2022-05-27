@@ -9,7 +9,7 @@ import serial
 
 class GtiSerialProxy:
     def __init__(self, port, baud):
-        self.ser = serial.Serial("/dev/ttyACM0", 576000)
+        self.ser = serial.Serial(port, baud)
         self.ser.read_all()
 
     def call(self, addr: int, numparam_return: int, *args):
@@ -35,19 +35,56 @@ class GtiSerialProxy:
     def memory_write(self, addr: int, data: bytes) -> None:
         return self.command(2, struct.pack("!I", addr) + data, 0)
 
+    def echo(self, data: bytes) -> bytes:
+        return self.command(0, data, len(data))
+
 
 class VarProxy:
-    def __init__(self, libproxy: "LibProxy", addr, type) -> None:
+    def __init__(self, libproxy: "LibProxy", addr, type, name=None) -> None:
         self._libproxy = libproxy
         self._addr = addr
         self._type = type
-        self._fields = {}
+        self._name = name
+
+    def _resolve(self):
+        res = self._libproxy._mi_write(f'-interpreter-exec console "ptype {self._type}"')
+        type = [r["payload"].strip().replace("type = ", "") for r in res if r["payload"]]
+        size = 0
+        for t in type:
+            if "{" in t or "}" in t:
+                continue
+            if t.endswith(";"):
+                t = " ".join(t.split(" ")[:1])
+            size += int(
+                self._libproxy._mi_write(f'-data-evaluate-expression "sizeof({t})"')[-1]["payload"]["value"]
+            )
+        self._size = size
 
     def __setattr__(self, name: str, value: any) -> None:
         if name.startswith("_"):
             super().__setattr__(name, value)
         else:
-            self.fields[name] = {value}
+            offset = int(
+                self._libproxy._mi_write(f'-data-evaluate-expression "&(({self._type} *)0)->{name}"')[-1][
+                    "payload"
+                ]["value"],
+                16,
+            )
+            return self._libproxy._proxy.memory_write(self._addr + offset, value)
+
+    def __getattr__(self, name: str) -> bytes:
+        offset = int(
+            self._libproxy._mi_write(f'-data-evaluate-expression "&(({self._type} *)0)->{name}"')[-1][
+                "payload"
+            ]["value"],
+            16,
+        )
+        size = int(
+            self._libproxy._mi_write(f'-data-evaluate-expression "sizeof((({self._type} *)0)->{name})"')[-1][
+                "payload"
+            ]["value"]
+        )
+        return self._libproxy._proxy.memory_read(self._addr + offset, size)
 
     def __repr__(self) -> str:
         return f"<VarProxy {self._type} @ 0x{self._addr:08x}>"
@@ -102,7 +139,7 @@ class LibProxy:
             self._mi_write(f"-data-evaluate-expression &{name}")[-1]["payload"]["value"].split(" ")[0],
             16,
         )
-        return VarProxy(self, addr, type)
+        return VarProxy(self, addr, type, name=name)
 
     def __getattr__(self, name):
         # Find out if name is function or variable
@@ -115,3 +152,6 @@ class LibProxy:
     @functools.lru_cache(maxsize=1024)
     def _mi_write(self, cmd: str) -> List[Dict]:
         return self._mi.write(cmd)
+
+    def _new(self, typename, addr, *args):
+        return VarProxy(self, addr, typename)
