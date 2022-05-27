@@ -23,6 +23,8 @@ class GtiSerialProxy:
         for arg in args:
             if isinstance(arg, int):
                 packed_args += struct.pack("!I", arg)
+            elif isinstance(arg, VarProxy):
+                packed_args += struct.pack("!I", arg._addr)
             else:
                 packed_args += arg
         return self.command(
@@ -71,11 +73,12 @@ class VarProxy:
             super().__setattr__(name, value)
         else:
             offset = int(
-                self._libproxy._mi_write(f'-data-evaluate-expression "&(({self._type} *)0)->{name}"')[-1][
+                self._libproxy._mi_write(f'-data-evaluate-expression "&(({self._type})0)->{name}"')[-1][
                     "payload"
                 ]["value"],
                 16,
             )
+            # TODO: Convert types
             return self._libproxy._proxy.memory_write(self._addr + offset, value)
 
     def __getattr__(self, name: str) -> bytes:

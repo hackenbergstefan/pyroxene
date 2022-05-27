@@ -1,5 +1,6 @@
 #include <stdint.h>
 
+#include "demo.h"
 #include "gti2.h"
 
 
@@ -177,4 +178,9 @@ uint32_t demo_func_1_10(
     uint32_t param10)
 {
     return 1 + param1 + param2 + param3 + param4 + param5 + param6 + param7 + param8 + param9 + param10;
+}
+
+uint32_t demo_struct(demo_struct_t *demo)
+{
+    return 1 + demo->a + demo->b;
 }

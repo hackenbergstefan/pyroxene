@@ -201,3 +201,18 @@ class PyGti2Test(unittest.TestCase):
 
         result = lib.demo_func_1_10(*params)
         self.assertEqual(result, 1 + sum(params))
+
+    @hypothesis.given(
+        a=hypothesis.strategies.integers(min_value=0, max_value=2**32 - 1),
+        b=hypothesis.strategies.integers(min_value=0, max_value=2**32 - 1),
+    )
+    @hypothesis.settings(max_examples=100)
+    def test_call_struct(self, a, b):
+        hypothesis.assume(a + b < 2**32)
+        demo_struct = lib._new("demo_struct_t *", addr=lib.gti2_memory._addr)
+
+        # TODO: Implement type converter
+        demo_struct.a = a.to_bytes(4, "little")
+        demo_struct.b = b.to_bytes(4, "little")
+        result = lib.demo_struct(demo_struct)
+        self.assertEqual(result, 1 + a + b)

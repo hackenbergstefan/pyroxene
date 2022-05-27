@@ -116,6 +116,8 @@ int main(void)
         demo_func_1_9(0, 0, 0, 0, 0, 0, 0, 0, 0);
         demo_func_1_10(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
+        demo_struct(NULL);
+
         handle_error();
     }
 
