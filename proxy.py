@@ -121,8 +121,7 @@ class FuncProxy:
         )
 
         if "int" in self._returnvalue:
-            # TODO: I hate endianess!
-            return struct.unpack("<I", result)[0]
+            return struct.unpack("!I", result)[0]
         else:
             return result
 

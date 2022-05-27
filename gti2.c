@@ -8,6 +8,8 @@
 
 #include "gti2.h"
 
+typedef unsigned int uint;
+
 uint8_t gti2_memory[1024];
 
 static inline uint16_t swap_uint16(uint16_t val)
@@ -101,55 +103,137 @@ static void gti2_dispatch_memorywrite(uint32_t data_length)
 static void gti2_dispatch_call(uint32_t data_length)
 {
     uintptr_t address = ntohi(*(uintptr_t *)&comdata.d.data[0]) | 1;
-    uint16_t numparam_out = ntoh16(*(uint16_t *)&comdata.d.data[sizeof(uintptr_t)]);
+    uint16_t numbytes_out = ntoh16(*(uint16_t *)&comdata.d.data[sizeof(uintptr_t)]);
     uint16_t numparam_in = ntoh16(*(uint16_t *)&comdata.d.data[sizeof(uintptr_t) + sizeof(uint16_t)]);
-    switch (numparam_in)
+
+#define offset_param1 (sizeof(uintptr_t) + sizeof(uint16_t) + sizeof(uint16_t))
+#define param1 (ntohi(*(uint *)&comdata.d.data[offset_param1]))
+#define param2 (ntohi(*(uint *)&comdata.d.data[offset_param1 + 1 * sizeof(uint)]))
+#define param3 (ntohi(*(uint *)&comdata.d.data[offset_param1 + 2 * sizeof(uint)]))
+#define param4 (ntohi(*(uint *)&comdata.d.data[offset_param1 + 3 * sizeof(uint)]))
+#define param5 (ntohi(*(uint *)&comdata.d.data[offset_param1 + 4 * sizeof(uint)]))
+#define param6 (ntohi(*(uint *)&comdata.d.data[offset_param1 + 5 * sizeof(uint)]))
+#define param7 (ntohi(*(uint *)&comdata.d.data[offset_param1 + 6 * sizeof(uint)]))
+#define param8 (ntohi(*(uint *)&comdata.d.data[offset_param1 + 7 * sizeof(uint)]))
+#define param9 (ntohi(*(uint *)&comdata.d.data[offset_param1 + 8 * sizeof(uint)]))
+#define param10 (ntohi(*(uint *)&comdata.d.data[offset_param1 + 9 * sizeof(uint)]))
+
+#define call_case(_paramout, _paramin) if (numparam_in == (_paramin) && numbytes_out == 4 * (_paramout))
+
+    // Cases with void return
+
+    call_case(0, 0)
     {
-        case 0:
-        {
-            switch (numparam_out)
-            {
-                case 0:
-                {
-                    ((void (*)(void))address)();
-                    break;
-                }
-                case 4:
-                {
-                    unsigned int result = ((unsigned int (*)(void))address)();
-                    gti2_write((uint8_t *)&result, sizeof(unsigned int));
-                    break;
-                }
-                default:
-                    break;
-            }
-            break;
-        }
-        case 1:
-        {
-            switch (numparam_out)
-            {
-                case 0:
-                {
-                    ((void (*)(unsigned int))address)(
-                        ntohi(*(uint32_t *)&comdata.d.data[sizeof(uintptr_t) + sizeof(uint16_t) + sizeof(uint16_t)]));
-                    break;
-                }
-                case 4:
-                {
-                    unsigned int result = ((unsigned int (*)(unsigned int))address)(
-                        ntohi(*(uint32_t *)&comdata.d.data[sizeof(uintptr_t) + sizeof(uint16_t) + sizeof(uint16_t)]));
-                    gti2_write((uint8_t *)&result, sizeof(unsigned int));
-                    break;
-                }
-                default:
-                    break;
-            }
-            break;
-        }
-        default:
-            break;
+        ((void (*)(void))address)();
+        return;
     }
+    call_case(0, 1)
+    {
+        ((void (*)(uint))address)(param1);
+        return;
+    }
+    call_case(0, 2)
+    {
+        ((void (*)(uint, uint))address)(param1, param2);
+        return;
+    }
+    call_case(0, 3)
+    {
+        ((void (*)(uint, uint, uint))address)(param1, param2, param3);
+        return;
+    }
+    call_case(0, 4)
+    {
+        ((void (*)(uint, uint, uint, uint))address)(param1, param2, param3, param4);
+        return;
+    }
+    call_case(0, 5)
+    {
+        ((void (*)(uint, uint, uint, uint, uint))address)(param1, param2, param3, param4, param5);
+        return;
+    }
+    call_case(0, 6)
+    {
+        ((void (*)(uint, uint, uint, uint, uint, uint))address)(param1, param2, param3, param4, param5, param6);
+        return;
+    }
+    call_case(0, 7)
+    {
+        ((void (*)(uint, uint, uint, uint, uint, uint, uint))
+             address)(param1, param2, param3, param4, param5, param6, param7);
+        return;
+    }
+    call_case(0, 8)
+    {
+        ((void (*)(uint, uint, uint, uint, uint, uint, uint, uint))
+             address)(param1, param2, param3, param4, param5, param6, param7, param8);
+        return;
+    }
+    call_case(0, 9)
+    {
+        ((void (*)(uint, uint, uint, uint, uint, uint, uint, uint, uint))
+             address)(param1, param2, param3, param4, param5, param6, param7, param8, param9);
+        return;
+    }
+    call_case(0, 10)
+    {
+        ((void (*)(uint, uint, uint, uint, uint, uint, uint, uint, uint, uint))
+             address)(param1, param2, param3, param4, param5, param6, param7, param8, param9, param10);
+        return;
+    }
+
+    // Cases with uint return
+    uint result = 0;
+    call_case(1, 0)
+    {
+        result = ((uint(*)(void))address)();
+    }
+    call_case(1, 1)
+    {
+        result = ((uint(*)(uint))address)(param1);
+    }
+    call_case(1, 2)
+    {
+        result = ((uint(*)(uint, uint))address)(param1, param2);
+    }
+    call_case(1, 3)
+    {
+        result = ((uint(*)(uint, uint, uint))address)(param1, param2, param3);
+    }
+    call_case(1, 4)
+    {
+        result = ((uint(*)(uint, uint, uint, uint))address)(param1, param2, param3, param4);
+    }
+    call_case(1, 5)
+    {
+        result = ((uint(*)(uint, uint, uint, uint, uint))address)(param1, param2, param3, param4, param5);
+    }
+    call_case(1, 6)
+    {
+        result = ((uint(*)(uint, uint, uint, uint, uint, uint))address)(param1, param2, param3, param4, param5, param6);
+    }
+    call_case(1, 7)
+    {
+        result = ((uint(*)(uint, uint, uint, uint, uint, uint, uint))
+                      address)(param1, param2, param3, param4, param5, param6, param7);
+    }
+    call_case(1, 8)
+    {
+        result = ((uint(*)(uint, uint, uint, uint, uint, uint, uint, uint))
+                      address)(param1, param2, param3, param4, param5, param6, param7, param8);
+    }
+    call_case(1, 9)
+    {
+        result = ((uint(*)(uint, uint, uint, uint, uint, uint, uint, uint, uint))
+                      address)(param1, param2, param3, param4, param5, param6, param7, param8, param9);
+    }
+    call_case(1, 10)
+    {
+        result = ((uint(*)(uint, uint, uint, uint, uint, uint, uint, uint, uint, uint))
+                      address)(param1, param2, param3, param4, param5, param6, param7, param8, param9, param10);
+    }
+    result = ntohi(result);
+    gti2_write((uint8_t *)&result, sizeof(uint));
 }
 
 __attribute__((noreturn)) void gti2_dispatcher(void)
