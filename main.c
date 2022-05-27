@@ -39,9 +39,9 @@
  *******************************************************************************/
 
 #include "cy_pdl.h"
-#include "cyhal.h"
-#include "cybsp.h"
 #include "cy_retarget_io.h"
+#include "cybsp.h"
+#include "cyhal.h"
 
 /*******************************************************************************
  * Function Name: handle_error
@@ -106,54 +106,78 @@ void dispatcher(void)
 
         switch (__REV16(uart_data.d.cmd))
         {
-        case 1: // Read memory [address[4] len[4]]
-        {
-            uintptr_t address = __REV(*(uintptr_t *)uart_data.d.data);
-            size_t len = __REV(*(size_t *)&uart_data.d.data[sizeof(uintptr_t)]);
-            write_exact((uint8_t *)address, len);
-            break;
-        }
-        case 2: // Write memory [address[4] data[...]]
-        {
-            uintptr_t address = __REV(*(uintptr_t *)uart_data.d.data);
-            memcpy((uint8_t *)address, &uart_data.d.data[sizeof(uintptr_t)], data_length - sizeof(uintptr_t));
-            break;
-        }
-        case 3: // Call [address[4] numparam_out[2] numparam_in[2] param_in1[4]? ...]
-        {
-            uintptr_t address = __REV(*(uintptr_t *)&uart_data.d.data[0]) | 1;
-            uint16_t numparam_out = __REV16(*(uint16_t *)&uart_data.d.data[sizeof(uintptr_t)]);
-            uint16_t numparam_in = __REV16(*(uint16_t *)&uart_data.d.data[sizeof(uintptr_t) + sizeof(uint16_t)]);
-            switch (numparam_in)
+            case 1: // Read memory [address[4] len[4]]
             {
-            case 0:
+                uintptr_t address = __REV(*(uintptr_t *)uart_data.d.data);
+                size_t len = __REV(*(size_t *)&uart_data.d.data[sizeof(uintptr_t)]);
+                write_exact((uint8_t *)address, len);
+                break;
+            }
+            case 2: // Write memory [address[4] data[...]]
             {
-                switch (numparam_out)
+                uintptr_t address = __REV(*(uintptr_t *)uart_data.d.data);
+                memcpy((uint8_t *)address, &uart_data.d.data[sizeof(uintptr_t)], data_length - sizeof(uintptr_t));
+                break;
+            }
+            case 3: // Call [address[4] numparam_out[2] numparam_in[2] param_in1[4]? ...]
+            {
+                uintptr_t address = __REV(*(uintptr_t *)&uart_data.d.data[0]) | 1;
+                uint16_t numparam_out = __REV16(*(uint16_t *)&uart_data.d.data[sizeof(uintptr_t)]);
+                uint16_t numparam_in = __REV16(*(uint16_t *)&uart_data.d.data[sizeof(uintptr_t) + sizeof(uint16_t)]);
+                switch (numparam_in)
                 {
-                case 0:
-                {
-                    ((void (*)(void))address)();
-                    break;
+                    case 0:
+                    {
+                        switch (numparam_out)
+                        {
+                            case 0:
+                            {
+                                ((void (*)(void))address)();
+                                break;
+                            }
+                            case 1:
+                            {
+                                unsigned int result = ((unsigned int (*)(void))address)();
+                                write_exact((uint8_t *)&result, sizeof(unsigned int));
+                                break;
+                            }
+                            default:
+                                break;
+                        }
+                        break;
+                    }
+                    case 1:
+                    {
+                        switch (numparam_out)
+                        {
+                            case 0:
+                            {
+                                ((void (*)(unsigned int))address)(
+                                    __REV(*(uint32_t *)&uart_data.d
+                                               .data[sizeof(uintptr_t) + sizeof(uint16_t) + sizeof(uint16_t)]));
+                                break;
+                            }
+                            case 1:
+                            {
+                                unsigned int result = ((unsigned int (*)(unsigned int))address)(
+                                    __REV(*(uint32_t *)&uart_data.d
+                                               .data[sizeof(uintptr_t) + sizeof(uint16_t) + sizeof(uint16_t)]));
+                                write_exact((uint8_t *)&result, sizeof(unsigned int));
+                                break;
+                            }
+                            default:
+                                break;
+                        }
+                        break;
+                    }
+                    default:
+                        break;
                 }
-                case 1:
-                {
-                    unsigned int result = ((unsigned int (*)(void))address)();
-                    write_exact((uint8_t *)&result, sizeof(unsigned int));
-                    break;
-                }
-                default:
-                    break;
-                }
+
                 break;
             }
             default:
                 break;
-            }
-
-            break;
-        }
-        default:
-            break;
         }
     }
 }
@@ -162,19 +186,27 @@ uint8_t scratch_buffer[1024];
 
 __attribute__((used, noinline)) void myfunc1(void)
 {
-    scratch_buffer[0] = 0xff;
+    scratch_buffer[0] = 0xde;
+    scratch_buffer[1] = 0xad;
 }
 
 __attribute__((used, noinline)) uint32_t myfunc2(void)
 {
     volatile uint32_t x = 42;
-    return x;
+    return &scratch_buffer[0];
+}
+
+__attribute__((used, noinline)) uint32_t myfunc3(uint32_t x)
+{
+    volatile uint32_t dummy = 42;
+    return x + 1;
 }
 
 int main(void)
 {
     myfunc1();
     myfunc2();
+    myfunc3(41);
 
     cy_rslt_t result;
 
@@ -186,8 +218,7 @@ int main(void)
     }
 
     /* Initialize retarget-io to use the debug UART port */
-    result = cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX,
-                                 576000);
+    result = cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX, 576000);
     if (result != CY_RSLT_SUCCESS)
     {
         handle_error();
@@ -198,24 +229,6 @@ int main(void)
     cyhal_uart_clear(&cy_retarget_io_uart_obj);
     scratch_buffer[0] = 0;
     dispatcher();
-
-    // for (;;)
-    // {
-    //     uint8_t buffer[1024];
-    //     memset(buffer, 0, sizeof(buffer));
-    //     size_t length = 0;
-
-    //     do
-    //     {
-    //         cyhal_uart_getc(&cy_retarget_io_uart_obj, &buffer[length], 0);
-    //         length++;
-    //     } while (buffer[length - 1] != '\n' && buffer[length - 1] != '\r');
-    //     for (size_t i = 0; i < length; i++)
-    //     {
-    //         cyhal_uart_putc(&cy_retarget_io_uart_obj, buffer[i]);
-    //     }
-    //     cyhal_uart_putc(&cy_retarget_io_uart_obj, '\n');
-    // }
 }
 
 /* [] END OF FILE */

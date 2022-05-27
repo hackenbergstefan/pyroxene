@@ -1,31 +1,67 @@
-import time
-import struct
+import pygdbmi
+import pygdbmi.gdbcontroller
 
-import serial
+import proxy
+
 
 def pprint(bytes):
     if not bytes:
         return
-    print(' '.join(f'{b:02x}' for b in bytes))
+    print(" ".join(f"{b:02x}" for b in bytes))
 
-ser = serial.Serial('/dev/ttyACM0', 576000)
-pprint(ser.read_all())
 
-def command(cmd, data, expected):
-    ser.write(struct.pack('!HH', cmd, len(data)) + data)
-    return ser.read(expected)
+def main():
+    libproxy = proxy.LibProxy(
+        pygdbmi.gdbcontroller.GdbController(
+            [
+                "gdb-multiarch",
+                "--nx",
+                "--quiet",
+                "--interpreter=mi3",
+                "./build/CY8CPROTO-062-4343W/Debug/mtb-example-psoc6-uart-transmit-receive.elf",
+            ],
+            time_to_check_for_additional_output_sec=0.1,
+        ),
+        proxy.GtiSerialProxy("/dev/ttyACM0", 576000),
+    )
+    # Demo variable read and write
+    libproxy.scratch_buffer[0:16] = 16 * b"\xff"
+    print(libproxy.scratch_buffer[0:32])
+    libproxy.scratch_buffer[0:16] = 16 * b"\x00"
+    print(libproxy.scratch_buffer[0:32])
 
-def memory_read(addr, len):
-    return command(1, struct.pack('!II', addr, len), len)
+    # Demo function call
+    pprint(libproxy.myfunc1())
+    pprint(libproxy.myfunc2())
+    pprint(libproxy.myfunc3(43))
 
-def memory_write(addr, data):
-    command(2, struct.pack('!I', addr) + data, 0)
+    print(libproxy.scratch_buffer[0:32])
 
-def call(addr, numparam_return, *params):
-    return command(3, struct.pack('!IHH', addr, numparam_return, len(params)) + b''.join(params), numparam_return)
 
-pprint(memory_write(0x080029c8, 16 * b'\x00'))
-pprint(memory_read(0x080029c8, 16))
-pprint(call(0x100028f4, 0))
-pprint(memory_read(0x080029c8, 16))
-pprint(call(0x10002900, 1))
+def gdbmi():
+    mi = pygdbmi.gdbcontroller.GdbController(
+        [
+            "gdb-multiarch",
+            "--nx",
+            "--quiet",
+            "--interpreter=mi3",
+        ],
+        time_to_check_for_additional_output_sec=0.1,
+    )
+
+    print(
+        mi.write(
+            "-file-exec-and-symbols ./build/CY8CPROTO-062-4343W/Debug/mtb-example-psoc6-uart-transmit-receive.elf"
+        )
+    )
+    print(mi.write("-data-evaluate-expression myfunc1"))
+    print(mi.write("-data-evaluate-expression myfunc4"))
+    print(mi.write("-data-evaluate-expression scratch_buffer"))
+    print(mi.write("-data-evaluate-expression &scratch_buffer"))
+    print(mi.write("-data-evaluate-expression &scratch_buffer"))
+    print(mi.write("-symbol-info-variables --name scratch_buffer"))
+    print(mi.write("-symbol-info-functions --name myfunc3"))
+
+
+if __name__ == "__main__":
+    main()
