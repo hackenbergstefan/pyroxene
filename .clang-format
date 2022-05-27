@@ -1,0 +1,44 @@
+---
+Language: Cpp
+BasedOnStyle: WebKit
+AccessModifierOffset: -4
+AlignAfterOpenBracket: AlwaysBreak
+AlignEscapedNewlines: DontAlign
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: true
+AllowAllArgumentsOnNextLine: false
+BinPackArguments: false
+BinPackParameters: false
+BreakBeforeBinaryOperators: None
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: true
+  AfterClass: true
+  AfterControlStatement: true
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterObjCDeclaration: true
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: true
+  BeforeCatch: true
+  BeforeElse: true
+  IndentBraces: false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+MaxEmptyLinesToKeep: 2
+PenaltyReturnTypeOnItsOwnLine: 1000
+TabWidth: 4
+UseCRLF: false
+UseTab: Never
+ColumnLimit: 120
+PointerAlignment: Right
+IndentCaseLabels: true
+CommentPragmas: '^lint|^\s?\\.+'
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+StatementMacros: ['_Pragma', 'IFX_ISS_SIG_PRAGMA', 'SECTION']
