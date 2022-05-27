@@ -10,9 +10,15 @@ import serial
 class GtiSerialProxy:
     def __init__(self, port, baud):
         self.ser = serial.Serial(port, baud)
-        self.ser.read_all()
+        while True:
+            self.ser.read_all()
+            self.ser.timeout = 0.5
+            echo = self.echo(b"hello")
+            if echo == b"hello":
+                break
+        self.ser.timeout = None
 
-    def call(self, addr: int, numparam_return: int, *args):
+    def call(self, addr: int, numbytes_return: int, *args):
         packed_args = b""
         for arg in args:
             if isinstance(arg, int):
@@ -21,8 +27,8 @@ class GtiSerialProxy:
                 packed_args += arg
         return self.command(
             3,
-            struct.pack("!IHH", addr, numparam_return, len(args)) + packed_args,
-            numparam_return * 4,
+            struct.pack("!IHH", addr, numbytes_return, len(args)) + packed_args,
+            numbytes_return,
         )
 
     def command(self, cmd, data, expected):
@@ -46,19 +52,19 @@ class VarProxy:
         self._type = type
         self._name = name
 
-    def _resolve(self):
-        res = self._libproxy._mi_write(f'-interpreter-exec console "ptype {self._type}"')
-        type = [r["payload"].strip().replace("type = ", "") for r in res if r["payload"]]
-        size = 0
-        for t in type:
-            if "{" in t or "}" in t:
-                continue
-            if t.endswith(";"):
-                t = " ".join(t.split(" ")[:1])
-            size += int(
-                self._libproxy._mi_write(f'-data-evaluate-expression "sizeof({t})"')[-1]["payload"]["value"]
-            )
-        self._size = size
+    # def _resolve(self):
+    #     res = self._libproxy._mi_write(f'-interpreter-exec console "ptype {self._type}"')
+    #     type = [r["payload"].strip().replace("type = ", "") for r in res if r["payload"]]
+    #     size = 0
+    #     for t in type:
+    #         if "{" in t or "}" in t:
+    #             continue
+    #         if t.endswith(";"):
+    #             t = " ".join(t.split(" ")[:1])
+    #         size += int(
+    #             self._libproxy._mi_write(f'-data-evaluate-expression "sizeof({t})"')[-1]["payload"]["value"]
+    #         )
+    #     self._size = size
 
     def __setattr__(self, name: str, value: any) -> None:
         if name.startswith("_"):
@@ -107,11 +113,18 @@ class FuncProxy:
         self._args = args
 
     def __call__(self, *args):
-        return self._libproxy._proxy.call(
+        result = self._libproxy._proxy.call(
             self._addr,
-            0 if self._returnvalue == "void" else 1,
+            # TODO: Improve!
+            0 if self._returnvalue == "void" else 4,
             *args,
         )
+
+        if "int" in self._returnvalue:
+            # TODO: I hate endianess!
+            return struct.unpack("<I", result)[0]
+        else:
+            return result
 
 
 class LibProxy:
@@ -122,7 +135,7 @@ class LibProxy:
     def _getattr_function(self, name: str) -> FuncProxy:
         result = self._mi_write(f"-data-evaluate-expression {name}")
         result = result[-1]["payload"]["value"]
-        match = re.match(r"{(?P<ret>\S+) \((?P<args>.+)\)} (?P<addr>0x[0-9a-f]+) <(?P<name>\S+)>", result)
+        match = re.match(r"{(?P<ret>[\S ]+) \((?P<args>.+)\)} (?P<addr>0x[0-9a-f]+) <(?P<name>\S+)>", result)
         return FuncProxy(
             self,
             name,
