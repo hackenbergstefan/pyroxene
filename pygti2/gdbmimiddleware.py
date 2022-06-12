@@ -55,12 +55,12 @@ class GdbmiMiddleware:
         )
         return response["payload"]
 
-    def _resolve_type(self, typ: str, accessor: str, addr: str) -> str:
-        expr_type = self.console(f"whatis (({typ}*)0x{addr:x}){accessor}").replace("\\n", "", 1)
+    def _resolve_type(self, typ: str, accessor: str, addr: int) -> str:
+        expr_type = self.console(f"whatis (({typ})0x{addr:x}){accessor}").replace("\\n", "", 1)
         if not expr_type.startswith("type = "):
             raise ValueError("WTF?", expr_type)
         typ = expr_type.replace("type = ", "", 1)
-        return typ
+        return typ.strip()
 
     def sizeof(self, typ: str) -> int:
         if typ == "void":

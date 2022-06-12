@@ -8,6 +8,10 @@ import pygti2.device_commands
 import pygti2.device_proxy
 import pygti2.gdbmimiddleware
 
+# import logging
+
+# logging.basicConfig(level=logging.DEBUG)
+
 hypothesis.settings.register_profile("default", deadline=None, max_examples=10)
 hypothesis.settings.load_profile("default")
 
