@@ -63,6 +63,9 @@ class GdbmiMiddleware:
         return typ
 
     def sizeof(self, typ: str) -> int:
+        if typ == "void":
+            # GDB says void is 1. I regard it as 0 :-)
+            return 0
         size = gdb_decode(self.eval(f"sizeof({typ})"), "int")
         return size
 
