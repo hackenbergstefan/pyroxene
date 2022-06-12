@@ -3,8 +3,6 @@
 #include "gti2.h"
 #include "swap.h"
 
-typedef unsigned long ulong;
-
 uint8_t gti2_memory[1024];
 
 typedef union

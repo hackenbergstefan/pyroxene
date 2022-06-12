@@ -175,7 +175,7 @@ class FuncProxy:
             *args,
         )
 
-        if "int" in self._returnvalue:
+        if "int" in self._returnvalue or "long" in self._returnvalue:
             return self._libproxy._proxy.unpack_long(result)
         else:
             return result

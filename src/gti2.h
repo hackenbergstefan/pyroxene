@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef unsigned long ulong;
+
 void gti2_dispatcher(void);
 void gti2_read(uint8_t *buffer, size_t length);
 void gti2_write(uint8_t *buffer, size_t length);

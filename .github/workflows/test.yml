@@ -14,8 +14,9 @@ jobs:
         python-version: 3.8
     - name: Compile host example
       run: |
-        pushd examples
-        make host_example
+        pushd test
+        make host_test
+        popd
     - name: Install dependencies
       run: |
         sudo apt install gdb
@@ -23,7 +24,7 @@ jobs:
         pip install -r requirements.txt
     - name: Test
       run: |
-        ./examples/host_example &
+        ./test/host_test &
         pid=$!
-        python -m unittest -v test
+        python -m unittest -v test/test_*.py
         kill -SIGTERM $!
