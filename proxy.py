@@ -189,10 +189,10 @@ class LibProxy:
         self._read_sizeofs()
 
     def _read_sizeofs(self):
-        result = self._mi_write(f'-data-evaluate-expression "sizeof(unsigned long)"')
+        result = self._mi_write('-data-evaluate-expression "sizeof(unsigned long)"')
         self._proxy.sizeof_long = int(result[-1]["payload"]["value"])
 
-        result = self._mi_write(f'-data-evaluate-expression "sizeof(void *)"')
+        result = self._mi_write('-data-evaluate-expression "sizeof(void *)"')
         if int(result[-1]["payload"]["value"]) != self._proxy.sizeof_long:
             raise ValueError("sizeof(void *) != sizeof(unsigned long)")
 
