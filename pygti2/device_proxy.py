@@ -1,93 +1,4 @@
-import struct
-import socket
-
-import serial
-
-from . import gdbmimiddleware
-
-
-class GtiProxy:
-    sizeof_long = 4
-
-    def pack_long(self, x: int) -> bytes:
-        return x.to_bytes(self.sizeof_long, "big")
-
-    def unpack_long(self, x: bytes) -> int:
-        return int.from_bytes(x, "big")
-
-    def command(self, cmd, data, expected):
-        self.write(struct.pack("!HH", cmd, len(data)) + data)
-        return self.read(expected)
-
-    def call(self, addr: int, numbytes_return: int, *args) -> bytes:
-        packed_args = b""
-        for arg in args:
-            if isinstance(arg, int):
-                # packed_args += struct.pack("!I", arg)
-                packed_args += self.pack_long(arg)
-            elif isinstance(arg, VarProxy):
-                # packed_args += struct.pack("!I", arg._addr)
-                packed_args += self.pack_long(arg._addr)
-            else:
-                packed_args += arg
-        result = self.command(
-            3,
-            b"".join(
-                (
-                    self.pack_long(addr),
-                    struct.pack("!HH", numbytes_return, len(args)),
-                    packed_args,
-                )
-            ),
-            numbytes_return,
-        )
-        # print("call", hex(addr), numbytes_return, packed_args, "->", result)
-        return result
-
-    def memory_read(self, addr: int, size: int) -> bytes:
-        # print("memory_read", hex(addr), size)
-        return self.command(
-            1,
-            self.pack_long(addr) + self.pack_long(size),
-            size,
-        )
-
-    def memory_write(self, addr: int, data: bytes) -> None:
-        # print("memory_write", hex(addr), data.hex())
-        return self.command(2, self.pack_long(addr) + data, 0)
-
-    def echo(self, data: bytes) -> bytes:
-        return self.command(0, data, len(data))
-
-
-class GtiSerialProxy(GtiProxy):
-    def __init__(self, port, baud):
-        self.ser = serial.Serial(port, baud)
-        while True:
-            self.ser.read_all()
-            self.ser.timeout = 0.5
-            echo = self.echo(b"hello")
-            if echo == b"hello":
-                break
-        self.ser.timeout = None
-
-    def read(self, length):
-        return self.ser.read(length)
-
-    def write(self, data):
-        self.ser.write(data)
-
-
-class GtiSocketProxy(GtiProxy):
-    def __init__(self, address):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect(address)
-
-    def read(self, length):
-        return self.sock.recv(length)
-
-    def write(self, data):
-        self.sock.sendall(data)
+from . import device_commands, gdbmimiddleware
 
 
 class VarProxy:
@@ -126,17 +37,8 @@ class VarProxy:
             return self._libproxy._proxy.memory_write(self._addr + offset, value)
 
     def __getattr__(self, name: str) -> bytes:
-        offset = int(
-            self._libproxy._mi.write(f'-data-evaluate-expression "&(({self._type} *)0)->{name}"')[-1][
-                "payload"
-            ]["value"],
-            16,
-        )
-        size = int(
-            self._libproxy._mi.write(f'-data-evaluate-expression "sizeof((({self._type} *)0)->{name})"')[-1][
-                "payload"
-            ]["value"]
-        )
+        offset = self._libproxy._mi.offset_of(self._type, name)
+        size = self._libproxy._mi.sizeof(self._type, name)
         return self._libproxy._proxy.memory_read(self._addr + offset, size)
 
     def __repr__(self) -> str:
@@ -182,7 +84,7 @@ class FuncProxy:
 
 
 class LibProxy:
-    def __init__(self, mi: gdbmimiddleware.GdbmiMiddleware, proxy: GtiProxy):
+    def __init__(self, mi: gdbmimiddleware.GdbmiMiddleware, proxy: device_commands.PyGti2Command):
         self._mi = mi
         self._proxy = proxy
 
