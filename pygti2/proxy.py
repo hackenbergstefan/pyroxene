@@ -1,11 +1,9 @@
-import functools
-import re
 import struct
 import socket
-from typing import Dict, List
 
-from pygdbmi.gdbcontroller import GdbController
 import serial
+
+from . import gdbmimiddleware
 
 
 class GtiProxy:
@@ -93,62 +91,56 @@ class GtiSocketProxy(GtiProxy):
 
 
 class VarProxy:
-    def __init__(self, libproxy: "LibProxy", addr, type, name=None) -> None:
-        self._libproxy = libproxy
-        self._addr = addr
-        self._type = type
-        self._name = name
+    def __init__(self, libproxy: "LibProxy", addr=None, type=None, name=None) -> None:
+        """
+        Create proxy of variable.
 
-    # def _resolve(self):
-    #     res = self._libproxy._mi_write(f'-interpreter-exec console "ptype {self._type}"')
-    #     type = [r["payload"].strip().replace("type = ", "") for r in res if r["payload"]]
-    #     size = 0
-    #     for t in type:
-    #         if "{" in t or "}" in t:
-    #             continue
-    #         if t.endswith(";"):
-    #             t = " ".join(t.split(" ")[:1])
-    #         size += int(
-    #             self._libproxy._mi_write(f'-data-evaluate-expression "sizeof({t})"')[-1]["payload"]["value"]
-    #         )
-    #     self._size = size
+        Either reflects a global existing variable given by `name`.
+        Or reflects a non-gdb known custom variable at `addr` of `type`.
+        """
+        self._libproxy = libproxy
+
+        if name:
+            self._name = name
+            self._type, self._addr = self._resolve_type_and_addr()
+        else:
+            if not addr or not type:
+                raise ValueError("If no name is given, addr and type must be set.")
+            self._addr = addr
+            self._type = type
+
+    def _resolve_type_and_addr(self):
+        addr = int(self._libproxy._mi.eval(f"&{self._name}").split(" ")[0], 16)
+        typ = self._libproxy._mi.symbol_info_variables(self._name)[0]["symbols"][0]["type"]
+        return typ, addr
 
     def __setattr__(self, name: str, value: any) -> None:
         if name.startswith("_"):
             super().__setattr__(name, value)
         else:
-            offset = int(
-                self._libproxy._mi_write(f'-data-evaluate-expression "&(({self._type})0)->{name}"')[-1][
-                    "payload"
-                ]["value"],
-                16,
-            )
-            if isinstance(value, int):
-                size = int(
-                    self._libproxy._mi_write(
-                        f'-data-evaluate-expression "sizeof((({self._type})0)->{name})"'
-                    )[-1]["payload"]["value"]
-                )
-                value = value.to_bytes(size, "little")
+            offset = self._libproxy._mi.offset_of(self._type, name)
             # TODO: Convert types
+            if isinstance(value, int):
+                size = self._libproxy._mi.sizeof(f"(({self._type})0)->{name}")
+                value = value.to_bytes(size, "little")
             return self._libproxy._proxy.memory_write(self._addr + offset, value)
 
     def __getattr__(self, name: str) -> bytes:
         offset = int(
-            self._libproxy._mi_write(f'-data-evaluate-expression "&(({self._type} *)0)->{name}"')[-1][
+            self._libproxy._mi.write(f'-data-evaluate-expression "&(({self._type} *)0)->{name}"')[-1][
                 "payload"
             ]["value"],
             16,
         )
         size = int(
-            self._libproxy._mi_write(f'-data-evaluate-expression "sizeof((({self._type} *)0)->{name})"')[-1][
+            self._libproxy._mi.write(f'-data-evaluate-expression "sizeof((({self._type} *)0)->{name})"')[-1][
                 "payload"
             ]["value"]
         )
         return self._libproxy._proxy.memory_read(self._addr + offset, size)
 
     def __repr__(self) -> str:
-        return f"<VarProxy {self._type} @ 0x{self._addr:08x}>"
+        return f"<VarProxy {self._type} {self._name or ''} @ 0x{self._addr:08x}>"
 
     def __getitem__(self, key):
         if isinstance(key, slice):
@@ -160,77 +152,54 @@ class VarProxy:
 
 
 class FuncProxy:
-    def __init__(self, libproxy: "LibProxy", name: str, addr: int, returnvalue: str, *args):
+    def __init__(self, libproxy: "LibProxy", name: str):
         self._libproxy = libproxy
         self._name = name
-        self._addr = addr
-        self._returnvalue = returnvalue
-        self._args = args
+        self._addr, self._returntype, self._params = self._resolve()
+
+    def _resolve(self):
+        result = self._libproxy._mi.symbol_info_functions(self._name)
+        sig = result[0]["symbols"][0]["type"]  # "returnvalue (param1, param2, ...)"
+        (returnvalue, _, params) = sig.partition(" ")
+        params = params[1:-1]  # remove the parentheses to get params..
+        params = params.split(", ")
+
+        addr = int(self._libproxy._mi.eval(f"{self._name}").split(" ")[-2], 16)
+        return addr, returnvalue, params
 
     def __call__(self, *args):
         result = self._libproxy._proxy.call(
             self._addr,
             # TODO: Improve!
-            0 if self._returnvalue == "void" else self._libproxy._proxy.sizeof_long,
+            0 if self._returntype == "void" else self._libproxy._proxy.sizeof_long,
             *args,
         )
 
-        if "int" in self._returnvalue or "long" in self._returnvalue:
+        if "int" in self._returntype or "long" in self._returntype:
             return self._libproxy._proxy.unpack_long(result)
         else:
             return result
 
 
 class LibProxy:
-    def __init__(self, mi: GdbController, proxy: GtiProxy):
+    def __init__(self, mi: gdbmimiddleware.GdbmiMiddleware, proxy: GtiProxy):
         self._mi = mi
         self._proxy = proxy
 
         self._read_sizeofs()
 
     def _read_sizeofs(self):
-        result = self._mi_write('-data-evaluate-expression "sizeof(unsigned long)"')
-        self._proxy.sizeof_long = int(result[-1]["payload"]["value"])
-
-        result = self._mi_write('-data-evaluate-expression "sizeof(void *)"')
-        if int(result[-1]["payload"]["value"]) != self._proxy.sizeof_long:
+        self._proxy.sizeof_long = self._mi.sizeof("unsigned long")
+        if self._mi.sizeof("void *") != self._proxy.sizeof_long:
             raise ValueError("sizeof(void *) != sizeof(unsigned long)")
-
-    def _getattr_function(self, name: str) -> FuncProxy:
-        result = self._mi_write(f"-data-evaluate-expression {name}")
-        result = result[-1]["payload"]["value"]
-        match = re.match(r"{(?P<ret>[\S ]+) \((?P<args>.+)\)} (?P<addr>0x[0-9a-f]+) <(?P<name>\S+)>", result)
-        return FuncProxy(
-            self,
-            name,
-            int(match.group("addr"), 16),
-            match.group("ret"),
-            *match.group("args").split(", "),
-        )
-
-    def _getattr_variable(self, name: str) -> VarProxy:
-        result = self._mi_write(f"-symbol-info-variables --name {name}")
-        # What a fuck!?
-        type = result[-1]["payload"]["symbols"]["debug"][0]["symbols"][0]["type"]
-        addr = int(
-            self._mi_write(f"-data-evaluate-expression &{name}")[-1]["payload"]["value"].split(" ")[0],
-            16,
-        )
-        return VarProxy(self, addr, type, name=name)
 
     def __getattr__(self, name):
         # Find out if name is function or variable
-        result = self._mi_write(f"-symbol-info-functions --name {name}")
-        if len(result[-1]["payload"]["symbols"]) > 0:
-            return self._getattr_function(name)
+        result = self._mi.symbol_info_functions(name)
+        if result:
+            return FuncProxy(self, name)
         else:
-            return self._getattr_variable(name)
-
-    @functools.lru_cache(maxsize=1024)
-    def _mi_write(self, cmd: str) -> List[Dict]:
-        result = self._mi.write(cmd)
-        # print(cmd, "->", result)
-        return result
+            return VarProxy(self, name=name)
 
     def _new(self, typename, addr, *args):
         return VarProxy(self, addr, typename)

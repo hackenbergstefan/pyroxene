@@ -2,9 +2,9 @@ import os
 
 import hypothesis
 import hypothesis.strategies
-import pygdbmi
 
 import pygti2
+import pygti2.gdbmimiddleware
 import pygti2.proxy
 
 hypothesis.settings.register_profile("default", deadline=None, max_examples=10)
@@ -17,15 +17,15 @@ def connect():
     global lib
     if not lib:
         lib = pygti2.proxy.LibProxy(
-            pygdbmi.gdbcontroller.GdbController(
-                [
+            pygti2.gdbmimiddleware.GdbmiMiddleware(
+                command=[
                     "gdb",
                     "--nx",
                     "--quiet",
                     "--interpreter=mi3",
                     os.path.join(os.path.dirname(__file__), "host_test"),
                 ],
-                time_to_check_for_additional_output_sec=0.1,
+                # time_to_check_for_additional_output_sec=0.1,
             ),
             pygti2.proxy.GtiSocketProxy(("localhost", 1234)),
         )
