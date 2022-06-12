@@ -6,7 +6,7 @@ import hypothesis.strategies
 import pygdbmi
 import proxy
 
-hypothesis.settings.register_profile("default", deadline=None)
+hypothesis.settings.register_profile("default", deadline=None, max_examples=10)
 hypothesis.settings.load_profile("default")
 
 lib = None
@@ -17,16 +17,30 @@ def connect():
     lib = proxy.LibProxy(
         pygdbmi.gdbcontroller.GdbController(
             [
-                "gdb-multiarch",
+                "gdb",
                 "--nx",
                 "--quiet",
                 "--interpreter=mi3",
-                "./build/CY8CPROTO-062-4343W/Debug/mtb-example-psoc6-uart-transmit-receive.elf",
+                "./examples/host_example",
             ],
             time_to_check_for_additional_output_sec=0.1,
         ),
-        proxy.GtiSerialProxy("/dev/ttyACM0", 576000),
+        proxy.GtiSocketProxy(("localhost", 1234)),
     )
+    # global lib
+    # lib = proxy.LibProxy(
+    #     pygdbmi.gdbcontroller.GdbController(
+    #         [
+    #             "gdb-multiarch",
+    #             "--nx",
+    #             "--quiet",
+    #             "--interpreter=mi3",
+    #             "./build/CY8CPROTO-062-4343W/Debug/mtb-example-psoc6-uart-transmit-receive.elf",
+    #         ],
+    #         time_to_check_for_additional_output_sec=0.1,
+    #     ),
+    #     proxy.GtiSerialProxy("/dev/ttyACM0", 576000),
+    # )
 
 
 class PyGti2Test(unittest.TestCase):
@@ -212,7 +226,7 @@ class PyGti2Test(unittest.TestCase):
         demo_struct = lib._new("demo_struct_t *", addr=lib.gti2_memory._addr)
 
         # TODO: Implement type converter
-        demo_struct.a = a.to_bytes(4, "little")
-        demo_struct.b = b.to_bytes(4, "little")
+        demo_struct.a = a
+        demo_struct.b = b
         result = lib.demo_struct(demo_struct)
         self.assertEqual(result, 1 + a + b)

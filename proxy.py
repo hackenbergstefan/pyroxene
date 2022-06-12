@@ -1,13 +1,68 @@
 import functools
 import re
 import struct
+import socket
 from typing import Dict, List
 
 from pygdbmi.gdbcontroller import GdbController
 import serial
 
 
-class GtiSerialProxy:
+class GtiProxy:
+    sizeof_long = 4
+
+    def pack_long(self, x: int) -> bytes:
+        return x.to_bytes(self.sizeof_long, "big")
+
+    def unpack_long(self, x: bytes) -> int:
+        return int.from_bytes(x, "big")
+
+    def command(self, cmd, data, expected):
+        self.write(struct.pack("!HH", cmd, len(data)) + data)
+        return self.read(expected)
+
+    def call(self, addr: int, numbytes_return: int, *args) -> bytes:
+        packed_args = b""
+        for arg in args:
+            if isinstance(arg, int):
+                # packed_args += struct.pack("!I", arg)
+                packed_args += self.pack_long(arg)
+            elif isinstance(arg, VarProxy):
+                # packed_args += struct.pack("!I", arg._addr)
+                packed_args += self.pack_long(arg._addr)
+            else:
+                packed_args += arg
+        result = self.command(
+            3,
+            b"".join(
+                (
+                    self.pack_long(addr),
+                    struct.pack("!HH", numbytes_return, len(args)),
+                    packed_args,
+                )
+            ),
+            numbytes_return,
+        )
+        # print("call", hex(addr), numbytes_return, packed_args, "->", result)
+        return result
+
+    def memory_read(self, addr: int, size: int) -> bytes:
+        # print("memory_read", hex(addr), size)
+        return self.command(
+            1,
+            self.pack_long(addr) + self.pack_long(size),
+            size,
+        )
+
+    def memory_write(self, addr: int, data: bytes) -> None:
+        # print("memory_write", hex(addr), data.hex())
+        return self.command(2, self.pack_long(addr) + data, 0)
+
+    def echo(self, data: bytes) -> bytes:
+        return self.command(0, data, len(data))
+
+
+class GtiSerialProxy(GtiProxy):
     def __init__(self, port, baud):
         self.ser = serial.Serial(port, baud)
         while True:
@@ -18,33 +73,23 @@ class GtiSerialProxy:
                 break
         self.ser.timeout = None
 
-    def call(self, addr: int, numbytes_return: int, *args):
-        packed_args = b""
-        for arg in args:
-            if isinstance(arg, int):
-                packed_args += struct.pack("!I", arg)
-            elif isinstance(arg, VarProxy):
-                packed_args += struct.pack("!I", arg._addr)
-            else:
-                packed_args += arg
-        return self.command(
-            3,
-            struct.pack("!IHH", addr, numbytes_return, len(args)) + packed_args,
-            numbytes_return,
-        )
+    def read(self, length):
+        return self.ser.read(length)
 
-    def command(self, cmd, data, expected):
-        self.ser.write(struct.pack("!HH", cmd, len(data)) + data)
-        return self.ser.read(expected)
+    def write(self, data):
+        self.ser.write(data)
 
-    def memory_read(self, addr: int, size: int) -> bytes:
-        return self.command(1, struct.pack("!II", addr, size), size)
 
-    def memory_write(self, addr: int, data: bytes) -> None:
-        return self.command(2, struct.pack("!I", addr) + data, 0)
+class GtiSocketProxy(GtiProxy):
+    def __init__(self, address):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect(address)
 
-    def echo(self, data: bytes) -> bytes:
-        return self.command(0, data, len(data))
+    def read(self, length):
+        return self.sock.recv(length)
+
+    def write(self, data):
+        self.sock.sendall(data)
 
 
 class VarProxy:
@@ -78,6 +123,13 @@ class VarProxy:
                 ]["value"],
                 16,
             )
+            if isinstance(value, int):
+                size = int(
+                    self._libproxy._mi_write(
+                        f'-data-evaluate-expression "sizeof((({self._type})0)->{name})"'
+                    )[-1]["payload"]["value"]
+                )
+                value = value.to_bytes(size, "little")
             # TODO: Convert types
             return self._libproxy._proxy.memory_write(self._addr + offset, value)
 
@@ -119,20 +171,30 @@ class FuncProxy:
         result = self._libproxy._proxy.call(
             self._addr,
             # TODO: Improve!
-            0 if self._returnvalue == "void" else 4,
+            0 if self._returnvalue == "void" else self._libproxy._proxy.sizeof_long,
             *args,
         )
 
         if "int" in self._returnvalue:
-            return struct.unpack("!I", result)[0]
+            return self._libproxy._proxy.unpack_long(result)
         else:
             return result
 
 
 class LibProxy:
-    def __init__(self, mi: GdbController, proxy: GtiSerialProxy):
+    def __init__(self, mi: GdbController, proxy: GtiProxy):
         self._mi = mi
         self._proxy = proxy
+
+        self._read_sizeofs()
+
+    def _read_sizeofs(self):
+        result = self._mi_write(f'-data-evaluate-expression "sizeof(unsigned long)"')
+        self._proxy.sizeof_long = int(result[-1]["payload"]["value"])
+
+        result = self._mi_write(f'-data-evaluate-expression "sizeof(void *)"')
+        if int(result[-1]["payload"]["value"]) != self._proxy.sizeof_long:
+            raise ValueError("sizeof(void *) != sizeof(unsigned long)")
 
     def _getattr_function(self, name: str) -> FuncProxy:
         result = self._mi_write(f"-data-evaluate-expression {name}")
@@ -166,7 +228,9 @@ class LibProxy:
 
     @functools.lru_cache(maxsize=1024)
     def _mi_write(self, cmd: str) -> List[Dict]:
-        return self._mi.write(cmd)
+        result = self._mi.write(cmd)
+        # print(cmd, "->", result)
+        return result
 
     def _new(self, typename, addr, *args):
         return VarProxy(self, addr, typename)

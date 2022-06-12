@@ -182,5 +182,6 @@ uint32_t demo_func_1_10(
 
 uint32_t demo_struct(demo_struct_t *demo)
 {
+    // printf("demo_struct %p 1 + %lu + %lu = %lu\n", demo, demo->a, demo->b, 1 + demo->a + demo->b);
     return 1 + demo->a + demo->b;
 }
