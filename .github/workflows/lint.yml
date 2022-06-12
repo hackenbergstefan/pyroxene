@@ -19,4 +19,4 @@ jobs:
     - name: Format with black
       run: |
         pip install black
-        black
+        black .

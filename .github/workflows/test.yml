@@ -18,9 +18,12 @@ jobs:
         make host_example
     - name: Install dependencies
       run: |
+        sudo apt install gdb
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     - name: Test
       run: |
-        ./examples/host_example
+        ./examples/host_example &
+        pid=$!
         python -m unittest -v test
+        kill -SIGTERM $!
