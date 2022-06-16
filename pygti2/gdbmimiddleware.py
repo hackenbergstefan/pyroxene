@@ -62,6 +62,13 @@ class GdbmiMiddleware:
         typ = expr_type.replace("type = ", "", 1)
         return typ.strip()
 
+    def whatis(self, what: str) -> str:
+        expr_type = self.console(f"whatis {what}").replace("\\n", "", 1)
+        if not expr_type.startswith("type = "):
+            raise ValueError("Not a type", expr_type)
+        typ = expr_type.replace("type = ", "", 1)
+        return typ.strip()
+
     def sizeof(self, typ: str) -> int:
         if typ == "void":
             # GDB says void is 1. I regard it as 0 :-)

@@ -5,6 +5,7 @@ from typing import List
 
 class PyGti2Command:
     sizeof_long = 4
+    endian = "little"
 
     def marshal_long(self, x: int) -> bytes:
         return x.to_bytes(self.sizeof_long, "big")
