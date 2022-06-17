@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <string.h>
 
 #include "gti2.h"
@@ -66,119 +67,57 @@ static void gti2_dispatch_call(uint32_t data_length)
 #define param9 (ntohl(*(ulong *)&comdata.d.data[offset_param1 + 8 * sizeof(ulong)]))
 #define param10 (ntohl(*(ulong *)&comdata.d.data[offset_param1 + 9 * sizeof(ulong)]))
 
-#define call_case(_paramout, _paramin) if (numparam_in == (_paramin) && numbytes_out == sizeof(ulong) * (_paramout))
-
-    // Cases with void return
-
-    call_case(0, 0)
-    {
-        ((void (*)(void))address)();
-        return;
-    }
-    call_case(0, 1)
-    {
-        ((void (*)(ulong))address)(param1);
-        return;
-    }
-    call_case(0, 2)
-    {
-        ((void (*)(ulong, ulong))address)(param1, param2);
-        return;
-    }
-    call_case(0, 3)
-    {
-        ((void (*)(ulong, ulong, ulong))address)(param1, param2, param3);
-        return;
-    }
-    call_case(0, 4)
-    {
-        ((void (*)(ulong, ulong, ulong, ulong))address)(param1, param2, param3, param4);
-        return;
-    }
-    call_case(0, 5)
-    {
-        ((void (*)(ulong, ulong, ulong, ulong, ulong))address)(param1, param2, param3, param4, param5);
-        return;
-    }
-    call_case(0, 6)
-    {
-        ((void (*)(ulong, ulong, ulong, ulong, ulong, ulong))address)(param1, param2, param3, param4, param5, param6);
-        return;
-    }
-    call_case(0, 7)
-    {
-        ((void (*)(ulong, ulong, ulong, ulong, ulong, ulong, ulong))
-             address)(param1, param2, param3, param4, param5, param6, param7);
-        return;
-    }
-    call_case(0, 8)
-    {
-        ((void (*)(ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong))
-             address)(param1, param2, param3, param4, param5, param6, param7, param8);
-        return;
-    }
-    call_case(0, 9)
-    {
-        ((void (*)(ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong))
-             address)(param1, param2, param3, param4, param5, param6, param7, param8, param9);
-        return;
-    }
-    call_case(0, 10)
-    {
-        ((void (*)(ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong))
-             address)(param1, param2, param3, param4, param5, param6, param7, param8, param9, param10);
-        return;
-    }
+#define call_case(_paramin) if (numparam_in == (_paramin))
 
     // Cases with ulong return
     ulong result = 0;
-    call_case(1, 0)
+    call_case(0)
     {
-        result = ((ulong(*)(void))address)();
+        result = ((uint64_t(*)(void))address)();
     }
-    call_case(1, 1)
+    call_case(1)
     {
-        result = ((ulong(*)(ulong))address)(param1);
+        result = ((uint64_t(*)(ulong))address)(param1);
     }
-    call_case(1, 2)
+    call_case(2)
     {
-        result = ((ulong(*)(ulong, ulong))address)(param1, param2);
+        result = ((uint64_t(*)(ulong, ulong))address)(param1, param2);
     }
-    call_case(1, 3)
+    call_case(3)
     {
-        result = ((ulong(*)(ulong, ulong, ulong))address)(param1, param2, param3);
+        result = ((uint64_t(*)(ulong, ulong, ulong))address)(param1, param2, param3);
     }
-    call_case(1, 4)
+    call_case(4)
     {
-        result = ((ulong(*)(ulong, ulong, ulong, ulong))address)(param1, param2, param3, param4);
+        result = ((uint64_t(*)(ulong, ulong, ulong, ulong))address)(param1, param2, param3, param4);
     }
-    call_case(1, 5)
+    call_case(5)
     {
-        result = ((ulong(*)(ulong, ulong, ulong, ulong, ulong))address)(param1, param2, param3, param4, param5);
+        result = ((uint64_t(*)(ulong, ulong, ulong, ulong, ulong))address)(param1, param2, param3, param4, param5);
     }
-    call_case(1, 6)
+    call_case(6)
     {
         result = ((
-            ulong(*)(ulong, ulong, ulong, ulong, ulong, ulong))address)(param1, param2, param3, param4, param5, param6);
+            uint64_t(*)(ulong, ulong, ulong, ulong, ulong, ulong))address)(param1, param2, param3, param4, param5, param6);
     }
-    call_case(1, 7)
+    call_case(7)
     {
-        result = ((ulong(*)(ulong, ulong, ulong, ulong, ulong, ulong, ulong))
+        result = ((uint64_t(*)(ulong, ulong, ulong, ulong, ulong, ulong, ulong))
                       address)(param1, param2, param3, param4, param5, param6, param7);
     }
-    call_case(1, 8)
+    call_case(8)
     {
-        result = ((ulong(*)(ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong))
+        result = ((uint64_t(*)(ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong))
                       address)(param1, param2, param3, param4, param5, param6, param7, param8);
     }
-    call_case(1, 9)
+    call_case(9)
     {
-        result = ((ulong(*)(ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong))
+        result = ((uint64_t(*)(ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong))
                       address)(param1, param2, param3, param4, param5, param6, param7, param8, param9);
     }
-    call_case(1, 10)
+    call_case(10)
     {
-        result = ((ulong(*)(ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong))
+        result = ((uint64_t(*)(ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong, ulong))
                       address)(param1, param2, param3, param4, param5, param6, param7, param8, param9, param10);
     }
     result = ntohl(result);
