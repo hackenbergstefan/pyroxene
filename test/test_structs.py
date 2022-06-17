@@ -47,6 +47,20 @@ class PyGti2TestStructs(unittest.TestCase):
         self.assertEqual(test_struct.a, a)
         self.assertEqual(test_struct.b, b)
 
+    def test_structs_3(self):
+        test_struct_1 = lib._new("test_struct_1 *", addr=lib.gti2_memory._addr)
+        test_struct_2 = lib._new(
+            "test_struct_3 *",
+            addr=lib.gti2_memory._addr + test_struct_1._type.parent.size,
+        )
+        test_struct_2.a = test_struct_1
+        self.assertEqual(test_struct_2.a, test_struct_1)
+
+    def test_structs_4(self):
+        test_struct = lib._new("test_struct_4 *", addr=lib.gti2_memory._addr)
+        test_struct.a = lib.TEST_ENUM_1_A
+        self.assertEqual(test_struct.a, lib.TEST_ENUM_1_A)
+
 
 class PyGti2TestStructsInFunctions(unittest.TestCase):
     @hypothesis.given(

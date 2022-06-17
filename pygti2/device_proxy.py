@@ -46,9 +46,13 @@ class CType:
 
     @property
     def is_int(self):
-        if re.search("char|short|int|long", self.base.name):
+        if not self.is_pointer and re.search("char|short|int|long", self.base.name):
             return True
         return False
+
+    @property
+    def is_enum(self):
+        return self._mi.whatis(self.name).startswith("enum")
 
     def __repr__(self) -> str:
         return f"<CType {self.name}>"
@@ -74,8 +78,12 @@ class VarProxy:
             self._type = type if isinstance(type, CType) else CType.get(self._libproxy._mi, type)
 
     def _resolve_type_and_addr(self):
-        addr = int(self._libproxy._mi.eval(f"&{self._name}").split(" ")[0], 16)
-        typ = self._libproxy._mi.symbol_info_variables(self._name)[0]["symbols"][0]["type"]
+        if self._libproxy._mi.whatis(self._name).startswith("enum"):
+            addr = None
+            typ = self._name
+        else:
+            addr = int(self._libproxy._mi.eval(f"&{self._name}").split(" ")[0], 16)
+            typ = self._libproxy._mi.symbol_info_variables(self._name)[0]["symbols"][0]["type"]
         return CType.get(self._libproxy._mi, typ), addr
 
     def __setattr__(self, name: str, value: any) -> None:
@@ -85,16 +93,25 @@ class VarProxy:
             offset = self._libproxy._mi.offset_of(self._type.name, name)
             if isinstance(value, int):
                 size = self._libproxy._mi.sizeof(f"(({self._type.name})0)->{name}")
-                value = value.to_bytes(size, self._libproxy._proxy.endian)
+            elif isinstance(value, VarProxy):
+                size = value._type.size
+                value = value._marshal()
+            else:
+                raise ValueError(f"No idea how to set: {value}")
+            value = value.to_bytes(size, self._libproxy._proxy.endian)
             return self._libproxy._proxy.memory_write(self._addr + offset, value)
 
     def __getattr__(self, name: str) -> bytes:
         offset = self._libproxy._mi.offset_of(self._type.name, name)
         typ = CType.get(self._libproxy._mi, self._libproxy._mi._resolve_type(self._type.name, f"->{name}", 0))
-        data = self._libproxy._proxy.memory_read(self._addr + offset, typ.size)
-        if typ.is_int:
-            return int.from_bytes(data, self._libproxy._proxy.endian)
-        return data
+        value = self._libproxy._proxy.memory_read(self._addr + offset, typ.size)
+        value = int.from_bytes(value, self._libproxy._proxy.endian)
+        if typ.is_int or typ.is_enum:
+            return value
+        elif typ.is_pointer:
+            return VarProxy(self._libproxy, addr=value, type=typ)
+        else:
+            raise ValueError(f"No idea how to get: {value}")
 
     def __repr__(self) -> str:
         return f"<VarProxy {self._type} {self._name or ''} @ 0x{self._addr:08x}>"
@@ -140,7 +157,16 @@ class VarProxy:
     def _marshal(self) -> int:
         if self._type.is_pointer:
             return self._addr
+        elif self._type.is_enum:
+            return int(self._libproxy._mi.eval(f"(ulong){self._name}"))
         raise NotImplementedError()
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, VarProxy):
+            return False
+        if all((self._type.is_pointer, other._type.is_pointer, self._addr == other._addr)):
+            return True
+        return False
 
 
 class FuncProxy:
@@ -215,7 +241,10 @@ class LibProxy:
         if result:
             return FuncProxy(self, name)
         else:
-            return VarProxy(self, name=name)
+            var = VarProxy(self, name=name)
+            if var._type.is_int or var._type.is_enum:
+                return var._marshal()
+            return var
 
     def _new(self, typename, addr, *args):
         return VarProxy(self, addr, typename)
