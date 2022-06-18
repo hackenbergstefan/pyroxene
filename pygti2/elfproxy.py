@@ -1,3 +1,4 @@
+import subprocess
 import re
 from typing import Optional
 
@@ -229,6 +230,21 @@ class CTypeDerivedArray(CTypeDerived, CTypeArrayType):
         return self.length * self._parent.size
 
 
+class CTypeMacro(CType):
+    def __init__(self, name: str, value: int):
+        self.name = name
+        self.value = value
+        CType.ctypes_by_name[self.name] = self
+
+    @property
+    def parent(self):
+        return None
+
+    @property
+    def is_int(self):
+        return True
+
+
 def loc2addr(die: DIE):
     addr = die.attributes["DW_AT_location"].value[1:]
     if len(addr) != die.dwarfinfo.config.default_address_size:
@@ -266,7 +282,35 @@ class CVarElf(CVar):
         return f"{self._name} {str(self._type)} @ {hex(self._addr)}"
 
 
-def create_ctypes(file):
+def parse_macros(readelf_binary: str, file: str):
+    """
+    Pyelftools do not support parsing of .debug_macro section. readelf is used instead.
+
+    Support is limited to numeric macros. Note, that false output can be produced.
+    """
+    macros = subprocess.check_output([readelf_binary, "--debug-dump=macro", file]).decode()
+    for line in macros.splitlines():
+        line = line.strip()
+        if not line.startswith("DW_MACRO_define_strp"):
+            continue
+        line = line.split(" : ")[-1]
+        name, _, rawvalue = line.partition(" ")
+        if name.startswith("_"):
+            continue
+        match = re.search(r"\b0x[0-9a-f]+\b", rawvalue, flags=re.IGNORECASE)
+        value = None
+        if match:
+            value = int(match.group(0), 16)
+        else:
+            match = re.search(r"\b-?[0-9]+\b", rawvalue)
+            if match:
+                value = int(match.group(0))
+        if not value:
+            continue
+        CTypeMacro(name, value)
+
+
+def create_ctypes(file, readelf_binary="readelf"):
     with open(file, "rb") as fp:
         elf = ELFFile(fp)
         dwarf = elf.get_dwarf_info()
@@ -310,24 +354,10 @@ def create_ctypes(file):
                 elif die.tag == "DW_TAG_enumeration_type":
                     ctype = CType.get_by_die(die)
                     continue
-                # elif "DW_AT_name" in die.attributes:
-                #     print(die)
 
-    # typ = CType.get("test_struct_1")
-    # print(typ, typ.members, [m.offset_in_struct for m in typ.members.values()])
-    # typ = CType.get("test_struct_2")
-    # print(typ, typ.members, [m.offset_in_struct for m in typ.members.values()])
-    # typ = CType.get("test_struct_3")
-    # print(typ, typ.members, [m.offset_in_struct for m in typ.members.values()])
-
-    # print(CVarElf._cvars["__TEST_ENUM_2_A"]._type.die)
-    # die = CVarElf._cvars["__TEST_ENUM_2_A"]._type.die.get_DIE_from_attribute("DW_AT_type")
-    # print(die)
-    # die = die.get_DIE_from_attribute("DW_AT_type")
-    # print(die)
-    # print(CTypeDerivedPointer("test_struct_3 *"))
-    # print(CTypeDerivedArray("uint8_t [120]"))
+    if readelf_binary:
+        parse_macros(readelf_binary, file)
 
 
 if __name__ == "__main__":
-    create_ctypes("test/host_test")
+    create_ctypes("test/host_test", readelf_binary="readelf")

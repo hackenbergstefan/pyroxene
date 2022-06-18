@@ -5,6 +5,7 @@ from pygti2.elfproxy import (
     CTypeDerived,
     CTypeDerivedArray,
     CTypeDerivedPointer,
+    CTypeMacro,
     CTypeTypedef,
     CVarElf,
     create_ctypes,
@@ -107,3 +108,25 @@ class PyGti2TestElfVars(unittest.TestCase):
         self.assertGreater(var._addr, 0)
         self.assertEqual(var._name, "gti2_memory")
         self.assertEqual(var._type, CType.get("uint8_t [1024]"))
+
+
+class PyGti2TestCTypeMacros(unittest.TestCase):
+    def setUp(self):
+        if len(CType.ctypes_by_die) == 0:
+            create_ctypes(os.path.join(os.path.dirname(__file__), "host_test"))
+
+    def test_enum_macros(self):
+        ctype = CType.get("TEST_ENUM_2_A")
+        self.assertIsInstance(ctype, CTypeMacro)
+        self.assertTrue(ctype.is_int)
+        self.assertEqual(ctype.value, 1)
+
+        ctype = CType.get("TEST_ENUM_2_B")
+        self.assertIsInstance(ctype, CTypeMacro)
+        self.assertTrue(ctype.is_int)
+        self.assertEqual(ctype.value, 2)
+
+        ctype = CType.get("TEST_ENUM_2_C")
+        self.assertIsInstance(ctype, CTypeMacro)
+        self.assertTrue(ctype.is_int)
+        self.assertEqual(ctype.value, 3)
