@@ -2,20 +2,33 @@ import subprocess
 import re
 from typing import Optional
 
+from elftools.dwarf.dwarfinfo import DWARFInfo
+from elftools.dwarf.dwarf_expr import DW_OP_opcode2name
 from elftools.dwarf.die import DIE
 from elftools.elf.elffile import ELFFile
 
 
+def loc2addr(die: DIE):
+    addr = die.attributes["DW_AT_location"].value
+    if DW_OP_opcode2name[addr[0]] != "DW_OP_addr":
+        raise ValueError("Not an address.")
+    addr = addr[1:]
+    if len(addr) != die.dwarfinfo.config.default_address_size:
+        raise NotImplementedError("No idea how to parse this address.")
+    return int.from_bytes(addr, CType.endian)
+
+
 class CType:
+    dwarf: DWARFInfo = None
     ctypes_by_name = {}
     ctypes_by_die = {}
 
     @staticmethod
-    def get(name):
-        return CType.ctypes_by_name[name]
+    def get(name) -> Optional["CType"]:
+        return CType.ctypes_by_name.get(name)
 
     @staticmethod
-    def get_by_die(die: DIE):
+    def get_by_die(die: DIE) -> "CType":
         if die in CType.ctypes_by_die:
             return CType.ctypes_by_die[die]
         return {
@@ -28,6 +41,7 @@ class CType:
             "DW_TAG_array_type": lambda d: CTypeArrayType(d),
             "DW_TAG_enumeration_type": lambda d: CTypeEnumType(d),
             "DW_TAG_enumerator": lambda d: CTypeEnumValue(d),
+            "DW_TAG_subprogram": lambda d: CTypeFunction(d),
         }[die.tag](die)
 
     def __init__(self, die: DIE):
@@ -61,6 +75,17 @@ class CType:
         if re.search("char|short|int|long", self.root.name):
             return True
         return False
+
+    def marshal_int(self, data) -> int:
+        if isinstance(data, int):
+            return data
+        elif hasattr(data, "_addr"):
+            return data._addr
+            # return data._type.marshal_int(data)
+        raise ValueError(f"Cannot marshal {data}.")
+
+    def marshal_bytes(self, data) -> bytes:
+        return self.marshal_int(data).to_bytes(self.size, CType.endian)
 
 
 class CTypePointerType(CType):
@@ -245,11 +270,24 @@ class CTypeMacro(CType):
         return True
 
 
-def loc2addr(die: DIE):
-    addr = die.attributes["DW_AT_location"].value[1:]
-    if len(addr) != die.dwarfinfo.config.default_address_size:
-        raise NotImplementedError("‍🤔️")
-    return int.from_bytes(addr, "little" if die.dwarfinfo.config.little_endian else "big")
+class CTypeFunction(CType):
+    def __init__(self, die: DIE):
+        super().__init__(die)
+        self.name = die.attributes["DW_AT_name"].value.decode()
+        self.addr = die.attributes["DW_AT_low_pc"].value
+        self.return_type = (
+            CType.get_by_die(die.get_DIE_from_attribute("DW_AT_type"))
+            if "DW_AT_type" in die.attributes
+            else None
+        )
+
+        CType.ctypes_by_name[self.name] = self
+
+        # for d in die.iter_children():
+        #     print(d)
+
+    def __repr__(self) -> str:
+        return f"{self.return_type} {self.name}(...) @ {self.addr:08x}"
 
 
 class CVar:
@@ -313,8 +351,9 @@ def parse_macros(readelf_binary: str, file: str):
 def create_ctypes(file, readelf_binary="readelf"):
     with open(file, "rb") as fp:
         elf = ELFFile(fp)
-        dwarf = elf.get_dwarf_info()
-        for cu in dwarf.iter_CUs():
+        CType.dwarf = elf.get_dwarf_info()
+        CType.endian = "little" if CType.dwarf.config.little_endian else "big"
+        for cu in CType.dwarf.iter_CUs():
             for die in cu.iter_DIEs():
                 if die.tag == "DW_TAG_base_type":
                     CType.get_by_die(die)
@@ -352,6 +391,12 @@ def create_ctypes(file, readelf_binary="readelf"):
                         CVarElf(die)
                     pass
                 elif die.tag == "DW_TAG_enumeration_type":
+                    ctype = CType.get_by_die(die)
+                    continue
+                elif die.tag == "DW_TAG_subprogram":
+                    if "DW_AT_low_pc" not in die.attributes:
+                        # No use for functions without an address
+                        continue
                     ctype = CType.get_by_die(die)
                     continue
 

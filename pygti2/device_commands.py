@@ -5,7 +5,6 @@ from typing import List
 
 class PyGti2Command:
     sizeof_long = 4
-    endian = "little"
 
     def marshal_long(self, x: int) -> bytes:
         return x.to_bytes(self.sizeof_long, "big")
@@ -73,6 +72,8 @@ class SocketCommand(PyGti2Command):
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect(address)
+        if self.echo(b"hello") != b"hello":
+            raise Exception("Something went wrong.")
 
     def read(self, length):
         return self.sock.recv(length)
