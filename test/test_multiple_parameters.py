@@ -13,7 +13,7 @@ class PyGti2TestMultipleParameters(unittest.TestCase):
     def test_echo(self, data):
         self.assertEqual(lib._proxy.echo(data), data)
 
-    @hypothesis.given(hypothesis.strategies.binary(min_size=1, max_size=512))
+    @hypothesis.given(hypothesis.strategies.binary(min_size=2, max_size=512))
     def test_write_read(self, data):
         lib.gti2_memory[0 : len(data)] = data
         self.assertEqual(lib.gti2_memory[0 : len(data)], data)
