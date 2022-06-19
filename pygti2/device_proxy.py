@@ -109,7 +109,6 @@ class NewVarProxy(VarProxy):
         Create proxy of an a new variable given by type and address.
         """
         self._libproxy = libproxy
-
         self._addr: int = addr
 
         if isinstance(type, str):
@@ -161,10 +160,11 @@ class ElfFuncProxy:
 
 
 class LibProxy:
-    def __init__(self, proxy: device_commands.PyGti2Command):
-        self._proxy = proxy
+    def __init__(self, communication: device_commands.PyGti2Command, memory_manager=None):
+        self._proxy = communication
+        self.memory_manager = memory_manager
         self.endian = "little" if CType.dwarf.config.little_endian else "big"
-        self.sizeof_long = proxy.sizeof_long = CType.get("long unsigned int").size
+        self.sizeof_long = communication.sizeof_long = CType.get("long unsigned int").size
 
         if self.sizeof_long != CType.get("void *").size:
             raise ValueError("sizeof(void *) != sizeof(unsigned long)")
@@ -180,3 +180,8 @@ class LibProxy:
 
     def _new(self, type: Union[CType, str], addr: int, *args):
         return NewVarProxy(self, type, addr)
+
+    def new(self, type: Union[CType, str]):
+        newvar = NewVarProxy(self, type, 0)
+        self.memory_manager.malloc(newvar)
+        return newvar

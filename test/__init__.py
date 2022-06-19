@@ -7,6 +7,7 @@ import pygti2
 import pygti2.device_commands
 import pygti2.device_proxy
 import pygti2.elfproxy
+import pygti2.memory_management
 
 # import logging
 
@@ -23,6 +24,7 @@ def connect():
     if not lib:
         pygti2.elfproxy.create_ctypes(os.path.join(os.path.dirname(__file__), "host_test"))
         lib = pygti2.device_proxy.LibProxy(
-            pygti2.device_commands.SocketCommand(("localhost", 1234)),
+            communication=pygti2.device_commands.SocketCommand(("localhost", 1234)),
+            memory_manager=pygti2.memory_management.SimpleMemoryManager("gti2_memory"),
         )
     return lib

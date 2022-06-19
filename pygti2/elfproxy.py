@@ -101,6 +101,10 @@ class CTypePointerType(CType):
     def size(self) -> int:
         return self.die.dwarfinfo.config.default_address_size
 
+    @property
+    def base_size(self) -> int:
+        return self.parent.size
+
 
 class CTypeArrayType(CType):
     def __init__(self, die: DIE):
@@ -118,6 +122,10 @@ class CTypeArrayType(CType):
     @property
     def size(self) -> int:
         return self.length * self.parent.size
+
+    @property
+    def base_size(self) -> int:
+        return self.size
 
 
 class CTypeTypedef(CType):
