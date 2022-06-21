@@ -1,27 +1,25 @@
-import os
 import unittest
 
 from pygti2.elfproxy import (
+    CType,
+    CTypeArrayType,
+    CTypeBaseType,
     CTypeDerived,
     CTypeDerivedArray,
     CTypeDerivedPointer,
     CTypeMacro,
-    CTypeTypedef,
-    CVarElf,
-    create_ctypes,
-    CType,
-    CTypeArrayType,
-    CTypeBaseType,
     CTypeMember,
     CTypePointerType,
+    CTypeTypedef,
+    CVarElf,
 )
+
+import test
+
+lib = test.connect()
 
 
 class PyGti2TestElfTypes(unittest.TestCase):
-    def setUp(self):
-        if len(CType.ctypes_by_die) == 0:
-            create_ctypes(os.path.join(os.path.dirname(__file__), "host_test"))
-
     def test_unsigned_char(self):
         ctype = CType.get("unsigned char")
         self.assertIsInstance(ctype, CTypeBaseType)
@@ -79,7 +77,7 @@ class PyGti2TestElfTypes(unittest.TestCase):
     def test_struct_3(self):
         ctype = CType.get("test_struct_3")
         self.assertIsInstance(ctype, CTypeTypedef)
-        self.assertEqual(ctype.size, ctype.die.dwarfinfo.config.default_address_size)
+        self.assertEqual(ctype.size, 2 * ctype.die.dwarfinfo.config.default_address_size)
         self.assertFalse(ctype.is_int)
 
     def test_derived_pointer(self):
@@ -99,10 +97,6 @@ class PyGti2TestElfTypes(unittest.TestCase):
 
 
 class PyGti2TestElfVars(unittest.TestCase):
-    def setUp(self):
-        if len(CType.ctypes_by_die) == 0:
-            create_ctypes(os.path.join(os.path.dirname(__file__), "host_test"))
-
     def test_gti_memory(self):
         var = CVarElf._cvars["gti2_memory"]
         self.assertGreater(var._addr, 0)
@@ -111,10 +105,6 @@ class PyGti2TestElfVars(unittest.TestCase):
 
 
 class PyGti2TestCTypeMacros(unittest.TestCase):
-    def setUp(self):
-        if len(CType.ctypes_by_die) == 0:
-            create_ctypes(os.path.join(os.path.dirname(__file__), "host_test"))
-
     def test_enum_macros(self):
         ctype = CType.get("TEST_ENUM_2_A")
         self.assertIsInstance(ctype, CTypeMacro)

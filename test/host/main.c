@@ -46,7 +46,7 @@ static void socket_connect(void)
     }
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = inet_addr("127.0.0.1");
-    address.sin_port = htons(1234);
+    address.sin_port = htons(9999);
 
     // Forcefully attaching socket
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)

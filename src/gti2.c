@@ -97,8 +97,8 @@ static void gti2_dispatch_call(uint32_t data_length)
     }
     call_case(6)
     {
-        result = ((
-            uint64_t(*)(ulong, ulong, ulong, ulong, ulong, ulong))address)(param1, param2, param3, param4, param5, param6);
+        result = ((uint64_t(*)(ulong, ulong, ulong, ulong, ulong, ulong))
+                      address)(param1, param2, param3, param4, param5, param6);
     }
     call_case(7)
     {

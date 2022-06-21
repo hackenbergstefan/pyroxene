@@ -1,6 +1,7 @@
 /******************************************************************************
  * File Name: main.c
  *
+ *
  * Description: This example demonstrates the UART transmit and receive
  *              operation using HAL APIs
  *
@@ -43,8 +44,8 @@
 #include "cybsp.h"
 #include "cyhal.h"
 
-#include "demo.h"
 #include "gti2.h"
+
 
 /*******************************************************************************
  * Function Name: handle_error
@@ -93,31 +94,6 @@ int main(void)
     result = cybsp_init();
     if (result != CY_RSLT_SUCCESS)
     {
-        demo_func_0_0();
-        demo_func_0_1(0);
-        demo_func_0_2(0, 0);
-        demo_func_0_3(0, 0);
-        demo_func_0_4(0, 0, 0, 0);
-        demo_func_0_5(0, 0, 0, 0, 0);
-        demo_func_0_6(0, 0, 0, 0, 0, 0);
-        demo_func_0_7(0, 0, 0, 0, 0, 0, 0);
-        demo_func_0_8(0, 0, 0, 0, 0, 0, 0, 0);
-        demo_func_0_9(0, 0, 0, 0, 0, 0, 0, 0, 0);
-        demo_func_0_10(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-
-        demo_func_1_1(0);
-        demo_func_1_2(0, 0);
-        demo_func_1_3(0, 0);
-        demo_func_1_4(0, 0, 0, 0);
-        demo_func_1_5(0, 0, 0, 0, 0);
-        demo_func_1_6(0, 0, 0, 0, 0, 0);
-        demo_func_1_7(0, 0, 0, 0, 0, 0, 0);
-        demo_func_1_8(0, 0, 0, 0, 0, 0, 0, 0);
-        demo_func_1_9(0, 0, 0, 0, 0, 0, 0, 0, 0);
-        demo_func_1_10(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-
-        demo_struct(NULL);
-
         handle_error();
     }
 

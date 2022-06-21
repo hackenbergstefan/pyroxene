@@ -1,4 +1,4 @@
 hypothesis
 pygdbmi
-serial
+pyserial
 git+https://github.com/eliben/pyelftools

@@ -31,7 +31,7 @@ class CType:
     def get_by_die(die: DIE) -> "CType":
         if die in CType.ctypes_by_die:
             return CType.ctypes_by_die[die]
-        return {
+        supported_types = {
             "DW_TAG_pointer_type": lambda d: CTypePointerType(d),
             "DW_TAG_base_type": lambda d: CTypeBaseType(d),
             "DW_TAG_structure_type": lambda d: CTypeStructType(d),
@@ -42,7 +42,10 @@ class CType:
             "DW_TAG_enumeration_type": lambda d: CTypeEnumType(d),
             "DW_TAG_enumerator": lambda d: CTypeEnumValue(d),
             "DW_TAG_subprogram": lambda d: CTypeFunction(d),
-        }[die.tag](die)
+        }
+        if die.tag in supported_types:
+            return supported_types[die.tag](die)
+        return None
 
     def __init__(self, die: DIE):
         CType.ctypes_by_die[die] = self
@@ -157,12 +160,14 @@ class CTypeBaseType(CType):
 class CTypeStructType(CType):
     def __init__(self, die: DIE):
         super().__init__(die)
+        # if "DW_AT_name" in die.attributes:
+        #     print(self.__class__.__name__, die.attributes["DW_AT_name"].value.decode())
 
-        if "DW_AT_sibling" in die.attributes:
-            self.typedef = CType.get_by_die(die.get_DIE_from_attribute("DW_AT_sibling"))
-        else:
+        if "DW_AT_name" in die.attributes:
             self.typedef = None
             self.name = die.attributes["DW_AT_name"].value.decode()
+        else:
+            self.typedef = CType.get_by_die(die.get_DIE_from_attribute("DW_AT_sibling"))
 
         if "DW_AT_byte_size" in die.attributes:
             self.size = die.attributes["DW_AT_byte_size"].value
@@ -362,6 +367,9 @@ def create_ctypes(file, readelf_binary="readelf"):
         CType.dwarf = elf.get_dwarf_info()
         CType.endian = "little" if CType.dwarf.config.little_endian else "big"
         for cu in CType.dwarf.iter_CUs():
+            cuname = cu.get_top_DIE().attributes["DW_AT_name"].value.decode()
+            if "test_" not in cuname and "gti2" not in cuname:
+                continue
             for die in cu.iter_DIEs():
                 if die.tag == "DW_TAG_base_type":
                     CType.get_by_die(die)
@@ -413,4 +421,5 @@ def create_ctypes(file, readelf_binary="readelf"):
 
 
 if __name__ == "__main__":
-    create_ctypes("test/host_test", readelf_binary="readelf")
+    # create_ctypes("test/host_test", readelf_binary="readelf")
+    create_ctypes("test/psoc/build/CY8CPROTO-062-4343W/Debug/gti2_test.elf")

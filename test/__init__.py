@@ -17,14 +17,23 @@ hypothesis.settings.register_profile("default", deadline=None, max_examples=10)
 hypothesis.settings.load_profile("default")
 
 lib = None
+dut = "host"
 
 
 def connect():
     global lib
     if not lib:
-        pygti2.elfproxy.create_ctypes(os.path.join(os.path.dirname(__file__), "host_test"))
+        if dut == "psoc":
+            elffile = os.path.join(
+                os.path.dirname(__file__), "psoc/build/CY8CPROTO-062-4343W/Debug/gti2_test.elf"
+            )
+            comm = pygti2.device_commands.SerialCommand("/dev/ttyACM0", 576000)
+        else:
+            elffile = os.path.join(os.path.dirname(__file__), "host/host_test")
+            comm = pygti2.device_commands.SocketCommand(("localhost", 9999))
+        pygti2.elfproxy.create_ctypes(elffile),
         lib = pygti2.device_proxy.LibProxy(
-            communication=pygti2.device_commands.SocketCommand(("localhost", 1234)),
+            communication=comm,
             memory_manager=pygti2.memory_management.SimpleMemoryManager("gti2_memory"),
         )
     return lib
