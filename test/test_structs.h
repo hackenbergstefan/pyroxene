@@ -30,6 +30,7 @@ typedef struct
 typedef struct
 {
     test_struct_1 *a;
+    uint8_t *b;
 } test_struct_3;
 
 typedef struct

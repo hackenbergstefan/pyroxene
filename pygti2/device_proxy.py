@@ -166,7 +166,7 @@ class LibProxy:
         self.endian = "little" if CType.dwarf.config.little_endian else "big"
         self.sizeof_long = communication.sizeof_long = CType.get("long unsigned int").size
 
-        if self.sizeof_long != CType.get("void *").size:
+        if self.sizeof_long != CType.dwarf.config.default_address_size:
             raise ValueError("sizeof(void *) != sizeof(unsigned long)")
 
     def __getattr__(self, name):
