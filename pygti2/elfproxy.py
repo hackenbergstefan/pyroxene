@@ -185,6 +185,10 @@ class CTypeMember(CType):
     def size(self) -> int:
         return self.parent.size
 
+    @property
+    def is_int(self):
+        return self.parent.is_int
+
 
 class CTypeConstType(CType):
     def __init__(self, die: DIE):
@@ -294,7 +298,14 @@ class CTypeFunction(CType):
         CType.ctypes_by_name[self.name] = self
 
     def __repr__(self) -> str:
-        return f"<{self.__class__.__name__} {self.return_type if self.return_type else 'void'} {self.name}(...) @ {self.addr:08x}>"
+        return (
+            f"<{self.__class__.__name__} "
+            f"{self.return_type if self.return_type else 'void'} {self.name}(...) @ {self.addr:08x}>"
+        )
+
+    @property
+    def parent(self):
+        return None
 
 
 class CVar:
@@ -350,12 +361,12 @@ def parse_macros(readelf_binary: str, file: str):
             match = re.search(r"\b-?[0-9]+\b", rawvalue)
             if match:
                 value = int(match.group(0))
-        if not value:
+        if value is None:
             continue
         CTypeMacro(name, value)
 
 
-def create_ctypes(file, readelf_binary="readelf", compilation_unit_filter=lambda: True):
+def create_ctypes(file, readelf_binary="readelf", compilation_unit_filter=lambda _: True):
     with open(file, "rb") as fp:
         elf = ELFFile(fp)
         CType.dwarf = elf.get_dwarf_info()

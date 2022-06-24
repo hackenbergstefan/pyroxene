@@ -6,6 +6,7 @@ from .elfproxy import (
     CTypeDerived,
     CTypeEnumValue,
     CTypeFunction,
+    CTypeMacro,
     CTypeMember,
     CTypeStructType,
     CVarElf,
@@ -176,6 +177,8 @@ class LibProxy:
                 return type.value
             if isinstance(type, CTypeFunction):
                 return ElfFuncProxy(self, name)
+            if isinstance(type, CTypeMacro):
+                return type.value
         return ElfVarProxy(self, name)
 
     def _new(self, type: Union[CType, str], addr: int, *args):
@@ -185,3 +188,10 @@ class LibProxy:
         newvar = NewVarProxy(self, type, 0)
         self.memory_manager.malloc(newvar)
         return newvar
+
+    def memset(self, addr: int, value: int, length: int):
+        self._proxy.memory_write(addr, length * bytes([value]))
+
+    def memcpy(self, destination: int, source: int, length: int):
+        content = self._proxy.memory_read(source, length)
+        self._proxy.memory_write(destination, content)
