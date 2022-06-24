@@ -160,15 +160,10 @@ class CTypeBaseType(CType):
 class CTypeStructType(CType):
     def __init__(self, die: DIE):
         super().__init__(die)
-        # if "DW_AT_name" in die.attributes:
-        #     print(self.__class__.__name__, die.attributes["DW_AT_name"].value.decode())
-
         if "DW_AT_name" in die.attributes:
-            self.typedef = None
             self.name = die.attributes["DW_AT_name"].value.decode()
         else:
-            self.typedef = CType.get_by_die(die.get_DIE_from_attribute("DW_AT_sibling"))
-
+            self.name = ""
         if "DW_AT_byte_size" in die.attributes:
             self.size = die.attributes["DW_AT_byte_size"].value
         else:
@@ -178,9 +173,6 @@ class CTypeStructType(CType):
         for d in die.iter_children():
             d = CType.get_by_die(d)
             self.members[d.name] = d
-
-    def __getattr__(self, d):
-        return getattr(self.typedef, d)
 
 
 class CTypeMember(CType):
@@ -286,7 +278,12 @@ class CTypeMacro(CType):
 class CTypeFunction(CType):
     def __init__(self, die: DIE):
         super().__init__(die)
-        self.name = die.attributes["DW_AT_name"].value.decode()
+        if "DW_AT_name" in die.attributes:
+            self.name = die.attributes["DW_AT_name"].value.decode()
+        elif "DW_AT_abstract_origin" in die.attributes:
+            self.name = (
+                die.get_DIE_from_attribute("DW_AT_abstract_origin").attributes["DW_AT_name"].value.decode()
+            )
         self.addr = die.attributes["DW_AT_low_pc"].value
         self.return_type = (
             CType.get_by_die(die.get_DIE_from_attribute("DW_AT_type"))
@@ -296,11 +293,8 @@ class CTypeFunction(CType):
 
         CType.ctypes_by_name[self.name] = self
 
-        # for d in die.iter_children():
-        #     print(d)
-
     def __repr__(self) -> str:
-        return f"{self.return_type} {self.name}(...) @ {self.addr:08x}"
+        return f"<{self.__class__.__name__} {self.return_type if self.return_type else 'void'} {self.name}(...) @ {self.addr:08x}>"
 
 
 class CVar:
@@ -361,43 +355,24 @@ def parse_macros(readelf_binary: str, file: str):
         CTypeMacro(name, value)
 
 
-def create_ctypes(file, readelf_binary="readelf"):
+def create_ctypes(file, readelf_binary="readelf", compilation_unit_filter=lambda: True):
     with open(file, "rb") as fp:
         elf = ELFFile(fp)
         CType.dwarf = elf.get_dwarf_info()
         CType.endian = "little" if CType.dwarf.config.little_endian else "big"
         for cu in CType.dwarf.iter_CUs():
             cuname = cu.get_top_DIE().attributes["DW_AT_name"].value.decode()
-            if "test_" not in cuname and "gti2" not in cuname:
+            if not compilation_unit_filter(cuname):
                 continue
             for die in cu.iter_DIEs():
                 if die.tag == "DW_TAG_base_type":
                     CType.get_by_die(die)
-                    continue
-                    print(
-                        die.attributes["DW_AT_name"].value.decode(),
-                        die.attributes["DW_AT_byte_size"].value,
-                    )
                 elif die.tag == "DW_TAG_typedef":
                     CType.get_by_die(die)
-                    continue
-
-                    print(die)
-                    print(
-                        die.attributes["DW_AT_name"].value.decode(),
-                    )
-                    return
                 elif die.tag == "DW_TAG_pointer_type":
-                    ctype = CType.get_by_die(die)
-                    continue
-                    print(ctype)
-                    # print(die)
-                elif die.tag == "DW_TAG_structure_type":
-                    ctype = CType.get_by_die(die)
-                    continue
+                    CType.get_by_die(die)
                 elif die.tag == "DW_TAG_variable" and "DW_AT_specification" in die.attributes:
                     CVarElf(die)
-                    pass
                 elif die.tag == "DW_TAG_variable":
                     if (
                         "DW_AT_external" in die.attributes
@@ -405,21 +380,13 @@ def create_ctypes(file, readelf_binary="readelf"):
                         and "DW_AT_declaration" not in die.attributes
                     ):
                         CVarElf(die)
-                    pass
                 elif die.tag == "DW_TAG_enumeration_type":
-                    ctype = CType.get_by_die(die)
-                    continue
+                    CType.get_by_die(die)
                 elif die.tag == "DW_TAG_subprogram":
                     if "DW_AT_low_pc" not in die.attributes:
                         # No use for functions without an address
                         continue
-                    ctype = CType.get_by_die(die)
-                    continue
+                    CType.get_by_die(die)
 
     if readelf_binary:
         parse_macros(readelf_binary, file)
-
-
-if __name__ == "__main__":
-    # create_ctypes("test/host_test", readelf_binary="readelf")
-    create_ctypes("test/psoc/build/CY8CPROTO-062-4343W/Debug/gti2_test.elf")
