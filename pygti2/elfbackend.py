@@ -1,6 +1,4 @@
-import subprocess
 import re
-from typing import Optional
 
 from elftools.dwarf.dwarfinfo import DWARFInfo
 from elftools.dwarf.dwarf_expr import DW_OP_opcode2name
@@ -16,7 +14,7 @@ def loc2addr(die: DIE):
     addr = addr[1:]
     if len(addr) != die.dwarfinfo.config.default_address_size:
         raise NotImplementedError("No idea how to parse this address.")
-    return int.from_bytes(addr, CType.endian)
+    return int.from_bytes(addr, "little" if die.dwarfinfo.config.little_endian else "big")
 
 
 def dw_at_encoding(die: DIE):
@@ -50,10 +48,13 @@ class CType:
                 return True
         return False
 
+    def __repr__(self) -> str:
+        return f'<{self.__class__.__name__} "{self.typename}">'
+
 
 class CTypeBaseType(CType):
     """
-    Types with tag "DW_AT_base_type"
+    Types with tag "DW_TAG_base_type"
     """
 
     @classmethod
@@ -69,7 +70,7 @@ class CTypeBaseType(CType):
 
 class CTypeBaseInt(CTypeBaseType):
     """
-    Types with tag "DW_AT_base_type" and integer like encoding
+    Types with tag "DW_TAG_base_type" and integer like encoding
     """
 
     def __init__(self, backend: "ElfBackend", die: DIE):
@@ -79,7 +80,7 @@ class CTypeBaseInt(CTypeBaseType):
 
 class CTypeBaseByte(CTypeBaseType):
     """
-    Types with tag "DW_AT_base_type" and byte or char like encoding.
+    Types with tag "DW_TAG_base_type" and byte or char like encoding.
     """
 
     def __init__(self, backend: "ElfBackend", die: DIE):
@@ -118,7 +119,7 @@ class CTypeArray(CType):
 
 class CTypeTypedef(CType):
     """
-    Types with tag "DW_AT_typedef".
+    Types with tag "DW_TAG_typedef".
     """
 
     def __init__(self, backend: "ElfBackend", die: DIE, base: CTypeBaseType):
@@ -155,7 +156,7 @@ class CTypeTypedefInt(CTypeTypedef):
 
 class CTypeTypedefByte(CTypeTypedef):
     """
-    Types with tag "DW_AT_typedef" and byte like.
+    Types with tag "DW_TAG_typedef" and byte like.
     """
 
     def __init__(self, backend: "ElfBackend", die: DIE, base: CTypeBaseType):
@@ -165,7 +166,7 @@ class CTypeTypedefByte(CTypeTypedef):
 
 class CTypeStruct(CType):
     """
-    Types with tag "DW_AT_structure_type".
+    Types with tag "DW_TAG_structure_type".
     """
 
     @classmethod
@@ -197,7 +198,7 @@ class CTypeStruct(CType):
 
 class CTypeTypedefStruct(CTypeTypedef, CTypeStruct):
     """
-    Types with tag "DW_AT_typedef_type" and type CTypeStructure.
+    Types with tag "DW_TAG_typedef" and type CTypeStructure.
     """
 
     def __init__(self, backend: "ElfBackend", die: DIE, base: CTypeStruct):
@@ -208,7 +209,7 @@ class CTypeTypedefStruct(CTypeTypedef, CTypeStruct):
 
 class CTypeTypedefPointer(CTypeTypedef, CTypePointer):
     """
-    Types with tag "DW_AT_typedef_type" and type CTypePointer.
+    Types with tag "DW_TAG_typedef" and type CTypePointer.
     """
 
     def __init__(self, backend: "ElfBackend", die: DIE, base: CTypePointer):
@@ -218,13 +219,55 @@ class CTypeTypedefPointer(CTypeTypedef, CTypePointer):
 
 class CTypeTypedefArray(CTypeTypedef, CTypeArray):
     """
-    Types with tag "DW_AT_typedef_type" and type CTypeArray.
+    Types with tag "DW_TAG_typedef_type" and type CTypeArray.
     """
 
     def __init__(self, backend: "ElfBackend", die: DIE, base: CTypeArray):
         CTypeTypedef.__init__(self, backend, die, base)
         self.kind = "typedef array"
         self.size = base.size
+
+
+class CTypeVariable(CType):
+    """
+    Types with tag "DW_TAG_variable_type".
+    """
+
+    @classmethod
+    def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypeVariable":
+        type = backend.type_from_die(die.get_DIE_from_attribute("DW_AT_type"))
+        return CTypeVariable(backend, die, type)
+
+    def __init__(self, backend: "ElfBackend", die: DIE, type: CType):
+        super().__init__(backend, die)
+        self.kind = "variable"
+        self.type = type
+        self.address = loc2addr(die)
+        self.size = type.size
+
+
+class CTypeFunction(CType):
+    """
+    Types with tag "DW_TAG_function".
+    """
+
+    @classmethod
+    def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypeFunction":
+        return CTypeFunction(backend, die)
+
+    def __init__(self, backend: "ElfBackend", die: DIE):
+        super().__init__(backend, die)
+        self.kind = "function"
+        self.address = die.attributes["DW_AT_low_pc"].value
+        self._create_argument_types()
+
+    def _create_argument_types(self):
+        self.return_type = self.backend.type_from_die(self.die.get_DIE_from_attribute("DW_AT_type"))
+        self.arguments = []
+        for child in self.die.iter_children():
+            if child.tag != "DW_TAG_formal_parameter":
+                continue
+            self.arguments.append(self.backend.type_from_die(child.get_DIE_from_attribute("DW_AT_type")))
 
 
 class ElfBackend:
@@ -243,6 +286,10 @@ class ElfBackend:
             type = CTypePointer._new(self, die)
         elif die.tag == "DW_TAG_array_type":
             type = CTypeArray._new(self, die)
+        elif die.tag == "DW_TAG_variable":
+            type = CTypeVariable._new(self, die)
+        elif die.tag == "DW_TAG_subprogram":
+            type = CTypeFunction._new(self, die)
         else:
             return None
 
@@ -259,9 +306,44 @@ class ElfBackend:
             self.elffile: ELFFile = ELFFile(fp)
             self.dwarfinfo: DWARFInfo = self.elffile.get_dwarf_info()
             self.endian: str = "little" if self.dwarfinfo.config.little_endian else "big"
+            self.sizeof_voidp: int = self.dwarfinfo.config.default_address_size
             for cu in self.dwarfinfo.iter_CUs():
                 cuname = cu.get_top_DIE().attributes["DW_AT_name"].value.decode()
                 if not compilation_unit_filter(cuname):
                     continue
                 for die in cu.iter_DIEs():
                     self.type_from_die(die)
+
+    def type_from_string(self, decl: str):
+        if decl in self.types:
+            return self.types[decl]
+        match = re.match(
+            r"(?P<base_pointer>[\w ]+\w) ?\*|(?P<base_array>[\w ]+\w) ?\[(?P<array_length>\d+)\]",
+            decl,
+        )
+        if not match:
+            raise TypeError(f'Cannot create type from "{decl}".')
+
+        if match.group("base_pointer"):
+            base = self.types[match.group("base_pointer")]
+            type = CTypePointer(self, None)
+            type.kind = "pointer"
+            type.size = self.sizeof_voidp
+            type.base = base
+        elif match.group("base_array"):
+            base = self.types[match.group("base_array")]
+            type = CTypePointer(self, None)
+            type.kind = "array"
+            type.length = int(match.group("array_length"), 0)
+            type.size = type.length * base.size
+            type.base = base
+        else:
+            raise TypeError(f'Cannot create type from "{decl}".')
+
+        if type.typename == "?":
+            return type
+        if type.typename in self.types:
+            return self.types[type.typename]
+        else:
+            self.types[type.typename] = type
+            return type
