@@ -7,9 +7,11 @@ from pygti2.elfbackend import (
     CType,
     CTypeBaseInt,
     CTypeBaseType,
+    CTypePointer,
     CTypeStruct,
     CTypeTypedef,
     CTypeTypedefInt,
+    CTypeVariable,
     ElfBackend,
 )
 
@@ -34,7 +36,7 @@ def compile(source: str, cmdline="gcc -c -g {infile} -o {outfile}", print_output
 
 
 class TestCTypeGcc(unittest.TestCase):
-    compiler_cmdline = "gcc -c -g {infile} -o {outfile}"
+    compiler_cmdline = "gcc -c -g3 {infile} -o {outfile}"
 
     def test_ctype_not_instanceable(self):
         with self.assertRaises(TypeError):
@@ -151,14 +153,14 @@ class TestCTypeGcc(unittest.TestCase):
     def test_typedefpointer(self):
         elf = compile(
             """
-            typedef int *intp;
-            intp a;
+            typedef char *charp;
+            charp a;
             """,
             cmdline=self.compiler_cmdline,
         )
-        typ: CTypeTypedef = elf.types["intp"]
+        typ: CTypeTypedef = elf.types["charp"]
         self.assertEqual(typ.kind, "typedef pointer")
-        self.assertEqual(typ.size, elf.dwarfinfo.config.default_address_size)
+        self.assertEqual(typ.size, elf.sizeof_voidp)
 
     def test_typedefarray(self):
         elf = compile(
@@ -172,6 +174,86 @@ class TestCTypeGcc(unittest.TestCase):
         typ: CTypeTypedef = elf.types["intarr"]
         self.assertEqual(typ.kind, "typedef array")
         self.assertEqual(typ.size, 8)
+
+    def test_decl_pointer(self):
+        elf = compile(
+            """
+            #include <stdint.h>
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        typ: CTypePointer = elf.type_from_string("unsigned int *")
+        self.assertEqual(typ.kind, "pointer")
+        self.assertEqual(typ.base, elf.types["unsigned int"])
+        self.assertEqual(typ.size, elf.sizeof_voidp)
+
+    def test_decl_pointer(self):
+        elf = compile(
+            """
+            #include <stdint.h>
+            uint8_t x;
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        typ: CTypePointer = elf.type_from_string("uint8_t *")
+        self.assertEqual(typ.kind, "pointer")
+        self.assertEqual(typ.base, elf.types["uint8_t"])
+        self.assertEqual(typ.size, elf.sizeof_voidp)
+
+    def test_decl_array(self):
+        elf = compile(
+            """
+            #include <stdint.h>
+            uint32_t x;
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        typ: CTypePointer = elf.type_from_string("uint32_t[2]")
+        self.assertEqual(typ.kind, "array")
+        self.assertEqual(typ.base, elf.types["uint32_t"])
+        self.assertEqual(typ.size, 8)
+
+    def test_predefined_variable(self):
+        elf = compile(
+            """
+            #include <stdint.h>
+            uint32_t x = 0;
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        typ: CTypeVariable = elf.types["x"]
+        self.assertEqual(typ.kind, "variable")
+        self.assertEqual(typ.type, elf.types["uint32_t"])
+        self.assertEqual(typ.size, 4)
+        self.assertEqual(typ.address, 0)
+
+    def test_predefined_function(self):
+        elf = compile(
+            """
+            #include <stdint.h>
+            uint32_t a(void) { }
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        typ: CTypeVariable = elf.types["a"]
+        self.assertEqual(typ.kind, "function")
+        self.assertEqual(typ.address, 0)
+        self.assertEqual(typ.return_type, elf.types["uint32_t"])
+        self.assertEqual(typ.arguments, [])
+
+    def test_predefined_function_with_arguments(self):
+        elf = compile(
+            """
+            #include <stdint.h>
+            uint32_t a(uint8_t _, uint32_t) { }
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        typ: CTypeVariable = elf.types["a"]
+        self.assertEqual(typ.kind, "function")
+        self.assertEqual(typ.address, 0)
+        self.assertEqual(typ.return_type, elf.types["uint32_t"])
+        self.assertEqual(typ.arguments, [elf.types["uint8_t"], elf.types["uint32_t"]])
 
 
 class TestCTypeGccArm(TestCTypeGcc):
