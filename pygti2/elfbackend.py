@@ -38,7 +38,7 @@ class CType:
         if die and "DW_AT_byte_size" in die.attributes:
             self.size = die.attributes["DW_AT_byte_size"].value
         else:
-            self.size = 0
+            self.size = -1
 
     @classmethod
     def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypeBaseType":
@@ -87,36 +87,60 @@ class CTypeBaseByte(CTypeBaseType):
         self.kind = "byte"
 
 
+class CTypePointer(CType):
+    def __init__(self, backend: "ElfBackend", die: DIE):
+        super().__init__(backend, die)
+        self.kind = "pointer"
+
+    @classmethod
+    def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypePointer":
+        return CTypePointer(backend, die)
+
+
+class CTypeArray(CType):
+    def __init__(self, backend: "ElfBackend", die: DIE, base: CType):
+        super().__init__(backend, die)
+        self.kind = "array"
+        self.length = self._length(self.die)
+        self.size = self.length * base.size
+
+    def _length(self, die: DIE):
+        for child in die.iter_children():
+            if child.tag != "DW_TAG_subrange_type":
+                continue
+            return child.attributes["DW_AT_upper_bound"].value + 1
+
+    @classmethod
+    def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypeArray":
+        base = backend.type_from_die(die.get_DIE_from_attribute("DW_AT_type"))
+        return CTypeArray(backend, die, base)
+
+
 class CTypeTypedef(CType):
     """
     Types with tag "DW_AT_typedef".
     """
 
     def __init__(self, backend: "ElfBackend", die: DIE, base: CTypeBaseType):
-        super().__init__(backend, die)
+        CType.__init__(self, backend, die)
         self.size = base.size
         self.base = base
 
     @classmethod
     def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypeTypedef":
-        base = CTypeTypedef._base_type(backend, die)
+        base = backend.type_from_die(die.get_DIE_from_attribute("DW_AT_type"))
         if base.kind == "int":
             return CTypeTypedefInt(backend, die, base)
         elif base.kind == "byte":
             return CTypeTypedefByte(backend, die, base)
         elif base.kind == "struct":
             return CTypeTypedefStruct(backend, die, base)
+        elif base.kind == "pointer":
+            return CTypeTypedefPointer(backend, die, base)
+        elif base.kind == "array":
+            return CTypeTypedefArray(backend, die, base)
         else:
             raise NotImplementedError(f"Unkown base kind: {base}")
-
-    @classmethod
-    def _base_type(cls, backend, die):
-        """Corresponding base type."""
-        while die.tag != "DW_TAG_base_type":
-            if "DW_AT_type" not in die.attributes:
-                break
-            die = die.get_DIE_from_attribute("DW_AT_type")
-        return backend.type_from_die(die)
 
 
 class CTypeTypedefInt(CTypeTypedef):
@@ -182,6 +206,27 @@ class CTypeTypedefStruct(CTypeTypedef, CTypeStruct):
         self._create_members(self.base.die)
 
 
+class CTypeTypedefPointer(CTypeTypedef, CTypePointer):
+    """
+    Types with tag "DW_AT_typedef_type" and type CTypePointer.
+    """
+
+    def __init__(self, backend: "ElfBackend", die: DIE, base: CTypePointer):
+        CTypeTypedef.__init__(self, backend, die, base)
+        self.kind = "typedef pointer"
+
+
+class CTypeTypedefArray(CTypeTypedef, CTypeArray):
+    """
+    Types with tag "DW_AT_typedef_type" and type CTypeArray.
+    """
+
+    def __init__(self, backend: "ElfBackend", die: DIE, base: CTypeArray):
+        CTypeTypedef.__init__(self, backend, die, base)
+        self.kind = "typedef array"
+        self.size = base.size
+
+
 class ElfBackend:
     def __init__(self, file: str, readelf_binary="readelf", compilation_unit_filter=lambda _: True):
         self.types = {}
@@ -194,6 +239,10 @@ class ElfBackend:
             type = CTypeTypedef._new(self, die)
         elif die.tag == "DW_TAG_structure_type":
             type = CTypeStruct._new(self, die)
+        elif die.tag == "DW_TAG_pointer_type":
+            type = CTypePointer._new(self, die)
+        elif die.tag == "DW_TAG_array_type":
+            type = CTypeArray._new(self, die)
         else:
             return None
 

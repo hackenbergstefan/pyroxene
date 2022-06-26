@@ -148,6 +148,31 @@ class TestCTypeGcc(unittest.TestCase):
         self.assertEqual(typ.size, 1)
         self.assertIn("a", typ.members)
 
+    def test_typedefpointer(self):
+        elf = compile(
+            """
+            typedef int *intp;
+            intp a;
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        typ: CTypeTypedef = elf.types["intp"]
+        self.assertEqual(typ.kind, "typedef pointer")
+        self.assertEqual(typ.size, elf.dwarfinfo.config.default_address_size)
+
+    def test_typedefarray(self):
+        elf = compile(
+            """
+            #include <stdint.h>
+            typedef uint32_t intarr[2];
+            intarr a;
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        typ: CTypeTypedef = elf.types["intarr"]
+        self.assertEqual(typ.kind, "typedef array")
+        self.assertEqual(typ.size, 8)
+
 
 class TestCTypeGccArm(TestCTypeGcc):
     compiler_cmdline = "arm-none-eabi-gcc -c -g {infile} -o {outfile}"
