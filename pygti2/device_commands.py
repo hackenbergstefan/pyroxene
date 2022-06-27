@@ -3,6 +3,27 @@ import struct
 from typing import List
 
 
+class Communicator:
+    def memory_read(self, addr: int, size: int) -> bytes:
+        raise NotImplementedError("Abstract.")
+
+    def memory_write(self, addr: int, data: bytes) -> None:
+        raise NotImplementedError("Abstract.")
+
+
+class CommunicatorStub(Communicator):
+    def __init__(self):
+        super().__init__()
+        self.memory = {}
+
+    def memory_read(self, addr: int, size: int) -> bytes:
+        return bytes([self.memory.get(location, 0) for location in range(addr, addr + size)])
+
+    def memory_write(self, addr: int, data: bytes) -> None:
+        for i, b in enumerate(data):
+            self.memory[addr + i] = b
+
+
 class PyGti2Command:
     sizeof_long = 4
 

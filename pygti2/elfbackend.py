@@ -89,13 +89,15 @@ class CTypeBaseByte(CTypeBaseType):
 
 
 class CTypePointer(CType):
-    def __init__(self, backend: "ElfBackend", die: DIE):
+    def __init__(self, backend: "ElfBackend", die: DIE, base: CType):
         super().__init__(backend, die)
         self.kind = "pointer"
+        self.base = base
 
     @classmethod
     def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypePointer":
-        return CTypePointer(backend, die)
+        base = backend.type_from_die(die.get_DIE_from_attribute("DW_AT_type"))
+        return CTypePointer(backend, die, base)
 
 
 class CTypeArray(CType):
@@ -106,6 +108,8 @@ class CTypeArray(CType):
         self.size = self.length * base.size
 
     def _length(self, die: DIE):
+        if not die:
+            return -1
         for child in die.iter_children():
             if child.tag != "DW_TAG_subrange_type":
                 continue
@@ -326,17 +330,17 @@ class ElfBackend:
 
         if match.group("base_pointer"):
             base = self.types[match.group("base_pointer")]
-            type = CTypePointer(self, None)
+            type = CTypePointer(self, None, base)
             type.kind = "pointer"
             type.size = self.sizeof_voidp
-            type.base = base
+            type.typename = f"{base.typename} *"
         elif match.group("base_array"):
             base = self.types[match.group("base_array")]
-            type = CTypePointer(self, None)
+            type = CTypeArray(self, None, base)
             type.kind = "array"
             type.length = int(match.group("array_length"), 0)
             type.size = type.length * base.size
-            type.base = base
+            type.typename = f"{base.typename} [{type.length}]"
         else:
             raise TypeError(f'Cannot create type from "{decl}".')
 
