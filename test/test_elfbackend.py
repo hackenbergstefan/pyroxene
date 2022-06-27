@@ -5,12 +5,11 @@ import unittest
 
 from pygti2.elfbackend import (
     CType,
-    CTypeBaseInt,
+    CTypeArray,
     CTypeBaseType,
     CTypePointer,
     CTypeStruct,
     CTypeTypedef,
-    CTypeTypedefInt,
     CTypeVariable,
     ElfBackend,
 )
@@ -183,6 +182,7 @@ class TestCTypeGcc(unittest.TestCase):
             cmdline=self.compiler_cmdline,
         )
         typ: CTypePointer = elf.type_from_string("unsigned int *")
+        self.assertEqual(typ.typename, "unsigned int *")
         self.assertEqual(typ.kind, "pointer")
         self.assertEqual(typ.base, elf.types["unsigned int"])
         self.assertEqual(typ.size, elf.sizeof_voidp)
@@ -196,6 +196,8 @@ class TestCTypeGcc(unittest.TestCase):
             cmdline=self.compiler_cmdline,
         )
         typ: CTypePointer = elf.type_from_string("uint8_t *")
+        self.assertIsInstance(typ, CTypePointer)
+        self.assertEqual(typ.typename, "uint8_t *")
         self.assertEqual(typ.kind, "pointer")
         self.assertEqual(typ.base, elf.types["uint8_t"])
         self.assertEqual(typ.size, elf.sizeof_voidp)
@@ -208,7 +210,9 @@ class TestCTypeGcc(unittest.TestCase):
             """,
             cmdline=self.compiler_cmdline,
         )
-        typ: CTypePointer = elf.type_from_string("uint32_t[2]")
+        typ: CTypeArray = elf.type_from_string("uint32_t[2]")
+        self.assertIsInstance(typ, CTypeArray)
+        self.assertEqual(typ.typename, "uint32_t [2]")
         self.assertEqual(typ.kind, "array")
         self.assertEqual(typ.base, elf.types["uint32_t"])
         self.assertEqual(typ.size, 8)
