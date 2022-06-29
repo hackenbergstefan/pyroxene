@@ -1,7 +1,7 @@
-from typing import List, Type, Union, Any
+from typing import Union
 from pygti2.device_commands import Communicator
 
-from pygti2.elfbackend import CType, CTypeArray, CTypePointer, CTypeStruct, CTypeTypedefStruct, ElfBackend
+from pygti2.elfbackend import CType, ElfBackend
 
 
 def junks(thelist, junksize):
@@ -10,277 +10,128 @@ def junks(thelist, junksize):
 
 
 class VarProxy:
-    allowed_types = (CType,)
-    __slots__ = ("backend", "com", "type", "name", "address")
+    """VarProxy behaves like a pointer to its type."""
 
-    def __init__(self, backend: ElfBackend, com: Communicator, type: CType, name: str, address: int):
-        if not isinstance(type, self.allowed_types):
-            raise TypeError(f"Is not a {self.allowed_types}: {type}")
+    __slots__ = ("backend", "com", "type", "address", "length")
 
+    @staticmethod
+    def new(backend: ElfBackend, com: Communicator, type: CType, address: int, length: int = -1):
+        if type.kind not in ("pointer", "array"):
+            raise TypeError("Only pointer or arrays can be created.")
+
+        if type.kind == "array":
+            length = type.length
+        return VarProxy.new2(backend, com, type.base, address, length)
+
+    @staticmethod
+    def new2(backend: ElfBackend, com: Communicator, type: CType, address: int, length: int = -1):
+        if type.kind in ("struct", "typedef struct"):
+            cls = VarProxyStruct
+        else:
+            cls = VarProxy
+        return cls(backend, com, type, address, length)
+
+    def __init__(self, backend: ElfBackend, com: Communicator, type: CType, address: int, length: int = -1):
         self.backend = backend
         self.com = com
         self.type = type
-        self.name = name
         self.address = address
+        self.length = length
 
     def __repr__(self) -> str:
-        return f"<{self.__class__.__name__} {self.type} @ 0x{self.address:08x}>"
+        return f"<{self.__class__.__name__} {self.type}[{self.length}] @ 0x{self.address:08x}>"
 
-    def convert_any_to_int(self, data):
-        if not isinstance(data, list):
-            data = [data]
-        result = [self._convert_any_to_int_item(d) for d in data]
-        if len(result) == 1:
-            return result[0]
-        else:
-            return result
-
-    def _convert_any_to_int_item(self, data):
-        if isinstance(data, int):
-            return data
-        elif isinstance(data, bytes):
-            return int.from_bytes(data, self.backend.endian)
-        elif isinstance(data, VarProxy):
-            return data.convert_to_int()
-        else:
-            raise TypeError(f"Cannot convert to int: {data}")
-
-    def _deref_pointer(self, address: int):
-        return int.from_bytes(self.com.memory_read(address, self.backend.sizeof_voidp), self.backend.endian)
-
-    def _write_pointer(self, address: int, data: int):
-        return self.com.memory_write(address, data.to_bytes(self.backend.sizeof_voidp, self.backend.endian))
-
-
-class VarProxyPointer(VarProxy):
-    allowed_types = (CTypePointer,)
-    __slots__ = (*VarProxy.__slots__, "base_type")
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.base_type = self.type.base
-
-    def convert_to_int(self):
-        return self.address
-
-    def _getitem_range(self, start, stop):
-        data = self.com.memory_read(self.address + start, (stop - start) * self.base_type.size)
-        if self.base_type.kind == "int":
-            return [int.from_bytes(junk, self.backend.endian) for junk in junks(data, self.base_type.size)]
-        elif self.base_type.kind == "byte":
-            return data
-        else:
-            raise TypeError(f"Unknown base kind: {self.base_type.kind}")
-
-    def __getitem__(self, index: Union[int, slice]):
-        if isinstance(index, slice):
-            return self._getitem_range(index.start, index.stop)
-        elif isinstance(index, int):
-            return self._getitem_range(index, index + 1)[0]
-        else:
-            raise TypeError("Not slice or int")
-
-    def _setitem_range(self, start, stop, data):
-        if len(data) != stop - start:
-            raise ValueError(f"Length does not match: {len(data)} != {stop - start}")
-
-        if self.base_type.kind == "byte":
-            return self.com.memory_write(self.address + start, data)
-        else:
-            data = self.convert_any_to_int(data)
-            return self.com.memory_write(
-                self.address + start,
-                b"".join(d.to_bytes(self.base_type.size, self.backend.endian) for d in data),
+    def _getitem_single(self, index):
+        newvarproxy = self.new2(
+            self.backend,
+            self.com,
+            self.type,
+            self.address + index * self.type.size,
+        )
+        content = newvarproxy.get_value()
+        if newvarproxy.is_primitive:
+            return content
+        elif self.type.kind == "pointer":
+            return self.new2(
+                self.backend,
+                self.com,
+                self.type.base,
+                int.from_bytes(content, self.backend.endian),
             )
-
-    def __setitem__(self, index: Union[int, slice], data):
-        if isinstance(index, slice):
-            return self._setitem_range(index.start, index.stop, data)
-        elif isinstance(index, int):
-            return self._setitem_range(index, index + 1, [data])
         else:
-            raise TypeError("Not slice or int")
+            raise ValueError("Cannot de-reference.")
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self._getitem_single(i) for i in range(index.start, index.stop)]
+        else:
+            return self._getitem_single(index)
+
+    def _setitem_single(self, index, data):
+        self.new2(
+            self.backend,
+            self.com,
+            self.type,
+            self.address + index * self.type.size,
+        ).set_value(data)
+
+    def __setitem__(self, index, data):
+        if isinstance(index, slice):
+            return [self._setitem_single(i, d) for i, d in zip(range(index.start, index.stop), data)]
+        else:
+            return self._setitem_single(index, data)
+
+    def get_value(self):
+        content = self.to_bytes()
+        if self.is_primitive:
+            return int.from_bytes(content, self.backend.endian)
+        return content
+
+    def set_value(self, data: Union[int, "VarProxy"]):
+        if isinstance(data, VarProxy) and self.type.kind == "pointer":
+            data = data.address
+        self.com.memory_write(
+            self.address,
+            data.to_bytes(self.type.size, self.backend.endian),
+        )
+
+    def to_bytes(self, *args):
+        return self.com.memory_read(self.address, self.type.size)
+
+    @property
+    def is_primitive(self):
+        return self.type.kind == "int"
 
 
-class VarProxyArray(VarProxyPointer):
-    allowed_types = (CTypeArray,)
+class VarProxyStruct(VarProxy):
+    def __getattr__(self, name):
+        if name not in self.type.members:
+            raise ValueError(f"Unknown member: {name}")
+        memberoffset, membertype = self.type.members[name]
+        memberproxy = VarProxy.new2(
+            self.backend,
+            self.com,
+            membertype,
+            self.address + memberoffset,
+        )
+        if memberproxy.is_primitive:
+            return memberproxy.get_value()
+        else:
+            return memberproxy
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.length = self.type.length
-
-    def _getitem_range(self, start, stop):
-        if stop > self.length:
-            raise IndexError(f"{stop} > {self.length}")
-        return super()._getitem_range(start, stop)
-
-    def _setitem_range(self, start, stop, data):
-        if stop > self.length:
-            raise IndexError(f"{stop} > {self.length}")
-        return super()._setitem_range(start, stop, data)
-
-
-class VarProxyStruct(VarProxyPointer):
-    allowed_types = (CTypePointer,)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def __getitem__(self, *args):
-        raise TypeError("Not item accessible.")
-
-    def __setitem__(self, *args):
-        raise TypeError("Not item accessible.")
-
-    def __getattr__(self, name: str):
-        if name not in self.base_type.members:
-            raise ValueError(f"Not a member: {name} of {self.base_type}.")
-
-        attribute_offset, attribute_type = self.base_type.members[name]
-        if attribute_type.kind == "int":
-            return VarProxyPointer(
-                self.backend,
-                self.com,
-                self.backend.type_from_string(f"{attribute_type.typename} *"),
-                name,
-                self.address + attribute_offset,
-            )[0]
-        elif attribute_type.kind == "pointer":
-            if attribute_type.base.kind in ("struct", "typedef struct"):
-                return VarProxyStruct(
-                    self.backend,
-                    self.com,
-                    attribute_type,
-                    name,
-                    self._deref_pointer(self.address + attribute_offset),
-                )
-        elif attribute_type.kind in ("struct", "typedef struct"):
-            if attribute_type.base.kind in ("struct", "typedef struct"):
-                return VarProxyStruct(
-                    self.backend,
-                    self.com,
-                    self.backend.type_from_string(f"{attribute_type.typename} *"),
-                    name,
-                    self.address + attribute_offset,
-                )
-
-    def __setattr__(self, name: str, data):
+    def __setattr__(self, name, data):
         if name in self.__slots__:
-            return VarProxyPointer.__setattr__(self, name, data)
+            return VarProxy.__setattr__(self, name, data)
+        if name not in self.type.members:
+            raise ValueError(f"Unknown member: {name}")
 
-        if name not in self.base_type.members:
-            raise ValueError(f'"{name}" is not a member of "{self.base_type}".')
-
-        attribute_offset, attribute_type = self.base_type.members[name]
-        if attribute_type.kind == "int":
-            VarProxyPointer(
-                self.backend,
-                self.com,
-                self.backend.type_from_string(f"{attribute_type.typename} *"),
-                name,
-                self.address + attribute_offset,
-            )[0] = data
-        elif attribute_type.kind == "pointer":
-            self._write_pointer(self.address + attribute_offset, self.convert_any_to_int(data))
-
-
-#     def __setitem__(self, key, data):
-#         if not isinstance(self._type, CTypeArrayType):
-#             raise TypeError("Not an array.")
-
-#         if isinstance(key, slice):
-#             for k, v in zip(range(key.start, key.stop), data):
-#                 self.__setitem__(k, v)
-#             return
-
-#         self._libproxy._proxy.memory_write(
-#             self._addr + key * self._type.parent.size,
-#             self._type.parent.marshal_bytes(data),
-#         )
-
-#     def __getitem__(self, key: slice):
-#         if not isinstance(self._type, CTypeArrayType):
-#             raise TypeError("Not an array.")
-
-#         if isinstance(key, int):
-#             key = slice(key, key + 1)
-
-#         data = self._libproxy._proxy.memory_read(
-#             self._addr + key.start * self._type.parent.size,
-#             self._type.parent.size * (key.stop - key.start),
-#         )
-
-#         # Make output compatible to cffi
-#         if key.stop - key.start == 1:
-#             return int.from_bytes(data, self._libproxy.endian)
-#         if self._type.parent.size == 1:
-#             return data
-
-#         return [int.from_bytes(d, self._libproxy.endian) for d in junks(data, self._type.parent.size)]
-
-#     def __setattr__(self, name: str, value: Any):
-#         if name.startswith("_"):
-#             super().__setattr__(name, value)
-#         else:
-#             structtype = self._type.parent.parent
-#             if not isinstance(structtype, CTypeStructType):
-#                 raise ValueError(f"Not a struct: {structtype}")
-#             membertype: CTypeMember = structtype.members[name]
-#             self._libproxy._proxy.memory_write(
-#                 self._addr + membertype.offset_in_struct,
-#                 membertype.marshal_bytes(value),
-#             )
-
-#     def __getattr__(self, name: str) -> Any:
-#         structtype = self._type.parent.parent
-#         if not isinstance(structtype, CTypeStructType):
-#             raise ValueError(f"Not a struct: {structtype}")
-
-#         membertype: CTypeMember = structtype.members[name]
-#         memberaddr = self._addr + membertype.offset_in_struct
-#         content_as_int = int.from_bytes(
-#             self._libproxy._proxy.memory_read(memberaddr, membertype.size),
-#             self._libproxy.endian,
-#         )
-#         if membertype.is_int:
-#             return content_as_int
-#         return NewVarProxy(self._libproxy, membertype.parent, content_as_int)
-
-#     def __eq__(self, other: object) -> bool:
-#         if not isinstance(other, VarProxy):
-#             return False
-#         return self._addr == other._addr
-
-
-# class ElfVarProxy(VarProxy):
-#     def __init__(self, libproxy: "LibProxy", name: str):
-#         """
-#         Create proxy of an a global existing variable given by `name`.
-#         """
-#         self._libproxy = libproxy
-
-#         self._name: str = name
-#         self._elfvar: CVarElf = CVarElf._cvars.get(name)
-#         self._type: CType = self._elfvar._type
-#         self._addr: int = self._elfvar._addr
-
-
-# class NewVarProxy(VarProxy):
-#     def __init__(self, libproxy: "LibProxy", type: Union[CType, str], addr: int):
-#         """
-#         Create proxy of an a new variable given by type and address.
-#         """
-#         self._libproxy = libproxy
-#         self._addr: int = addr
-
-#         if isinstance(type, str):
-#             typ = CType.get(type)
-#             if typ is None:
-#                 type = CTypeDerived.create(type)
-#             else:
-#                 type = typ
-
-#         self._type: CType = type
+        memberoffset, membertype = self.type.members[name]
+        VarProxy.new2(
+            self.backend,
+            self.com,
+            membertype,
+            self.address + memberoffset,
+        ).set_value(data)
 
 
 # class ElfFuncProxy:

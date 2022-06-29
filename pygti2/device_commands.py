@@ -17,9 +17,12 @@ class CommunicatorStub(Communicator):
         self.memory = {}
 
     def memory_read(self, addr: int, size: int) -> bytes:
-        return bytes([self.memory.get(location, 0) for location in range(addr, addr + size)])
+        result = bytes([self.memory.get(location, 0) for location in range(addr, addr + size)])
+        logging.getLogger(__name__).debug(f"PyGti2Command.memory_read {addr}, {size} -> {result.hex()}")
+        return result
 
     def memory_write(self, addr: int, data: bytes) -> None:
+        logging.getLogger(__name__).debug(f"PyGti2Command.memory_write {addr}, {data.hex()}")
         for i, b in enumerate(data):
             self.memory[addr + i] = b
 
