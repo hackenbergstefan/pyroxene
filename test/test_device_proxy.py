@@ -1,7 +1,7 @@
 import unittest
 from pygti2.device_commands import CommunicatorStub
 
-from pygti2.device_proxy import VarProxyArray, VarProxyPointer, VarProxyStruct
+from pygti2.device_proxy import VarProxy, VarProxyStruct
 
 from .test_elfbackend import compile
 
@@ -9,77 +9,7 @@ from .test_elfbackend import compile
 class TestDeviceProxyGcc(unittest.TestCase):
     compiler_cmdline = "gcc -c -g3 {infile} -o {outfile}"
 
-    def test_proxy_pointer(self):
-        elf = compile(
-            "#include <stdint.h>",
-            cmdline=self.compiler_cmdline,
-        )
-        var = VarProxyPointer(elf, CommunicatorStub(), elf.type_from_string("unsigned int *"), "a", 0)
-        self.assertEqual(var.type, elf.type_from_string("unsigned int *"))
-        self.assertEqual(var.address, 0)
-        self.assertEqual(var.name, "a")
-        self.assertEqual(var.convert_to_int(), 0)
-
-    def test_proxy_array(self):
-        elf = compile(
-            "#include <stdint.h>",
-            cmdline=self.compiler_cmdline,
-        )
-        var = VarProxyArray(elf, CommunicatorStub(), elf.type_from_string("unsigned int[1]"), "a", 0)
-        self.assertEqual(var.type, elf.type_from_string("unsigned int [1]"))
-        self.assertEqual(var.address, 0)
-        self.assertEqual(var.name, "a")
-        self.assertEqual(var.convert_to_int(), 0)
-        self.assertEqual(var.length, 1)
-
-    def test_access_pointer_int(self):
-        elf = compile(
-            """
-            #include <stdint.h>
-            uint32_t _;
-            """,
-            cmdline=self.compiler_cmdline,
-        )
-        com = CommunicatorStub()
-        var1 = VarProxyPointer(elf, com, elf.type_from_string("unsigned int *"), "a", 0)
-        self.assertEqual(var1[0], 0)
-
-        var1[0] = 0xFF
-
-        var2 = VarProxyPointer(elf, com, elf.type_from_string("uint32_t *"), "a", 0)
-        self.assertEqual(var2[0], 0xFF)
-
-    def test_access_array_int(self):
-        elf = compile(
-            """
-            #include <stdint.h>
-            uint32_t _;
-            """,
-            cmdline=self.compiler_cmdline,
-        )
-        com = CommunicatorStub()
-        var1 = VarProxyArray(elf, com, elf.type_from_string("unsigned int[2]"), "a", 0)
-        self.assertEqual(var1[0], 0)
-
-        var1[0] = 0xFF
-
-        var2 = VarProxyArray(elf, com, elf.type_from_string("uint32_t [2]"), "a", 0)
-        self.assertEqual(var2[0], 0xFF)
-
-    def test_access_array_int_range(self):
-        elf = compile(
-            """
-            #include <stdint.h>
-            uint32_t _;
-            """,
-            cmdline=self.compiler_cmdline,
-        )
-        com = CommunicatorStub()
-        var = VarProxyArray(elf, com, elf.type_from_string("uint32_t [2]"), "a", 0)
-        var[0:2] = [1234, 5678]
-        self.assertEqual(var[0:2], [1234, 5678])
-
-    def test_access_array_bytes_range(self):
+    def test_proxy_int(self):
         elf = compile(
             """
             #include <stdint.h>
@@ -87,37 +17,125 @@ class TestDeviceProxyGcc(unittest.TestCase):
             """,
             cmdline=self.compiler_cmdline,
         )
-        com = CommunicatorStub()
-        var = VarProxyArray(elf, com, elf.type_from_string("uint8_t [2]"), "a", 0)
-        var[0:2] = b"ab"
-        self.assertEqual(var[0:2], b"ab")
+        var = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("unsigned int *"), 0)
+        self.assertEqual(var.type, elf.type_from_string("unsigned int"))
+        self.assertEqual(var.address, 0)
+        self.assertEqual(var[0], 0)
+        self.assertEqual(var[1], 0)
+        var[0] = 1
+        var[1] = 2
+        self.assertEqual(var[0], 1)
+        self.assertEqual(var[1], 2)
 
-    def test_access_struct(self):
+        var = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("uint8_t *"), 0)
+        var[0] = 0xFF
+        self.assertEqual(var[0], 0xFF)
+
+    def test_proxy_struct(self):
+        elf = compile(
+            """
+            #include <stdint.h>
+            struct a {
+                uint32_t x;
+                uint8_t *y;
+            } a_;
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        var = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("struct a *"), 0)
+        self.assertIsInstance(var, VarProxyStruct)
+        self.assertEqual(var.type, elf.type_from_string("struct a"))
+        self.assertEqual(var.address, 0)
+        self.assertEqual(var.is_primitive, False)
+
+        self.assertEqual(var.x, 0)
+        var.x = 1
+        self.assertEqual(var.x, 1)
+
+        var2 = VarProxy(elf, CommunicatorStub(), elf.type_from_string("uint8_t *"), 16)
+        var.y = var2
+
+    def test_proxy_array(self):
+        elf = compile(
+            "#include <stdint.h>",
+            cmdline=self.compiler_cmdline,
+        )
+        var = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("unsigned int[1]"), 0)
+        self.assertEqual(var.type, elf.type_from_string("unsigned int"))
+        self.assertEqual(var.address, 0)
+        self.assertEqual(var.length, 1)
+        self.assertEqual(var[1], 0)
+        var[1] = 5
+        self.assertEqual(var[1], 5)
+
+    def test_proxy_array_2(self):
+        elf = compile(
+            "#include <stdint.h>",
+            cmdline=self.compiler_cmdline,
+        )
+        var = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("unsigned int[2]"), 0)
+        self.assertEqual(var.type, elf.type_from_string("unsigned int"))
+        self.assertEqual(var.length, 2)
+        self.assertEqual(var.address, 0)
+        var[0:2] = [1, 2]
+        self.assertEqual(var[0:2], [1, 2])
+
+    def test_proxy_typedef_struct(self):
         elf = compile(
             """
             #include <stdint.h>
             typedef struct {
-                uint64_t a;
+                uint32_t x;
             } a_t;
-            typedef struct {
-                a_t b1;
-                a_t *b2;
-            } b_t;
-            a_t a;
-            b_t b;
+            a_t _;
             """,
             cmdline=self.compiler_cmdline,
         )
-        com = CommunicatorStub()
-        com.memory_write(8, 8 * b"\xff")
-        var = VarProxyStruct(elf, com, elf.type_from_string("b_t *"), "bt", 0)
-        self.assertEqual(var.base_type.size, 8 + elf.sizeof_voidp)
-        self.assertIsInstance(var.b1, VarProxyStruct)
-        self.assertIsInstance(var.b2, VarProxyStruct)
+        var = VarProxyStruct(elf, CommunicatorStub(), elf.type_from_string("a_t"), 0)
+        self.assertEqual(var.is_primitive, False)
+        self.assertEqual(var.x, 0)
+        var.x = 1
+        self.assertEqual(var.x, 1)
 
-        var2 = VarProxyStruct(elf, com, elf.type_from_string("a_t *"), "at", 32)
-        var.b2 = var2
-        self.assertEqual(var.b2.address, 32)
+    def test_proxy_typedef_struct_2(self):
+        elf = compile(
+            """
+            #include <stdint.h>
+            typedef struct {
+                uint64_t x;
+            } a_t;
+            typedef struct {
+                a_t x;
+                a_t *y;
+            } b_t;
+            b_t _;
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        var = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("b_t *"), 0)
+        self.assertIsInstance(var, VarProxyStruct)
+        self.assertEqual(var.type, elf.type_from_string("b_t"))
+
+        self.assertIsInstance(var.x, VarProxyStruct)
+        self.assertEqual(var.x.type, elf.type_from_string("a_t"))
+        self.assertEqual(var.x.address, 0)
+
+        self.assertIsInstance(var.y, VarProxy)
+        self.assertEqual(var.y.type, elf.type_from_string("a_t *"))
+        self.assertEqual(var.y.address, 8)
+
+        self.assertIsInstance(var.y[0], VarProxyStruct)
+        self.assertEqual(var.y[0].type, elf.type_from_string("a_t"))
+        self.assertEqual(var.y[0].address, 0)
+
+        var.x.x = 1
+        self.assertEqual(var.x.x, 1)
+        var.y[0].x = 2
+        self.assertEqual(var.y[0].x, 2)
+
+        var2 = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("a_t *"), 16)
+        var.y = var2
+        self.assertEqual(var.y[0].address, var2.address)
 
 
 class TestDeviceProxyGccArm(TestDeviceProxyGcc):

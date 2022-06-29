@@ -60,10 +60,8 @@ class CTypeBaseType(CType):
     @classmethod
     def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypeBaseType":
         encoding = dw_at_encoding(die)
-        if encoding in ("(unsigned)", "(signed)"):
+        if encoding in ("(unsigned)", "(signed)", "(unsigned char)", "(signed char)"):
             return CTypeBaseInt(backend, die)
-        elif encoding in ("(unsigned char)", "(signed char)"):
-            return CTypeBaseByte(backend, die)
         else:
             raise NotImplementedError(f"Unkown encoding: {encoding}")
 
@@ -78,21 +76,13 @@ class CTypeBaseInt(CTypeBaseType):
         self.kind = "int"
 
 
-class CTypeBaseByte(CTypeBaseType):
-    """
-    Types with tag "DW_TAG_base_type" and byte or char like encoding.
-    """
-
-    def __init__(self, backend: "ElfBackend", die: DIE):
-        super().__init__(backend, die)
-        self.kind = "byte"
-
-
 class CTypePointer(CType):
     def __init__(self, backend: "ElfBackend", die: DIE, base: CType):
         super().__init__(backend, die)
         self.kind = "pointer"
         self.base = base
+        if self.base.typename != "?":
+            self.typename = f"{self.base.typename} *"
 
     @classmethod
     def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypePointer":
@@ -106,6 +96,7 @@ class CTypeArray(CType):
         self.kind = "array"
         self.length = self._length(self.die)
         self.size = self.length * base.size
+        self.base = base
 
     def _length(self, die: DIE):
         if not die:
@@ -136,8 +127,6 @@ class CTypeTypedef(CType):
         base = backend.type_from_die(die.get_DIE_from_attribute("DW_AT_type"))
         if base.kind == "int":
             return CTypeTypedefInt(backend, die, base)
-        elif base.kind == "byte":
-            return CTypeTypedefByte(backend, die, base)
         elif base.kind == "struct":
             return CTypeTypedefStruct(backend, die, base)
         elif base.kind == "pointer":
@@ -158,16 +147,6 @@ class CTypeTypedefInt(CTypeTypedef):
         self.kind = "int"
 
 
-class CTypeTypedefByte(CTypeTypedef):
-    """
-    Types with tag "DW_TAG_typedef" and byte like.
-    """
-
-    def __init__(self, backend: "ElfBackend", die: DIE, base: CTypeBaseType):
-        super().__init__(backend, die, base)
-        self.kind = "byte"
-
-
 class CTypeStruct(CType):
     """
     Types with tag "DW_TAG_structure_type".
@@ -180,6 +159,8 @@ class CTypeStruct(CType):
     def __init__(self, backend: "ElfBackend", die: DIE):
         super().__init__(backend, die)
         self.kind = "struct"
+        if self.typename != "?":
+            self.typename = f"struct {self.typename}"
         self._create_members(self.die)
 
     def _create_members(self, die):
@@ -322,7 +303,7 @@ class ElfBackend:
         if decl in self.types:
             return self.types[decl]
         match = re.match(
-            r"(?P<base_pointer>[\w ]+\w) ?\*|(?P<base_array>[\w ]+\w) ?\[(?P<array_length>\d+)\]",
+            r"^(?P<base_pointer>[\w ]+\w(?: ?\*)*) ?\*$|^(?P<base_array>[\w ]+\w) ?\[(?P<array_length>\d+)\]$",
             decl,
         )
         if not match:

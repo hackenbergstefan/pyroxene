@@ -10,9 +10,9 @@
 # import pygti2.elfproxy
 # import pygti2.memory_management
 
-# # import logging
+# import logging
 
-# # logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 
 # hypothesis.settings.register_profile("default", deadline=None, max_examples=10)
 # hypothesis.settings.load_profile("default")
