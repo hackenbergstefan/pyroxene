@@ -187,7 +187,7 @@ class TestCTypeGcc(unittest.TestCase):
         self.assertEqual(typ.base, elf.types["unsigned int"])
         self.assertEqual(typ.size, elf.sizeof_voidp)
 
-    def test_decl_pointer(self):
+    def test_decl_pointer_u8(self):
         elf = compile(
             """
             #include <stdint.h>
@@ -249,7 +249,7 @@ class TestCTypeGcc(unittest.TestCase):
         elf = compile(
             """
             #include <stdint.h>
-            uint32_t a(uint8_t _, uint32_t) { }
+            uint32_t a(uint8_t x, uint32_t y) { }
             """,
             cmdline=self.compiler_cmdline,
         )

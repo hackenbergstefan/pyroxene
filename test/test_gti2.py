@@ -3,7 +3,6 @@ import signal
 import subprocess
 import os
 from tempfile import TemporaryDirectory
-from time import time
 import unittest
 from pygti2.device_commands import Gti2SocketCommunicator
 from pygti2.device_proxy import LibProxy
@@ -38,7 +37,7 @@ def compile(source: str, print_output=False) -> LibProxy:
                 backend,
                 Gti2SocketCommunicator(("localhost", 9999), backend.sizeof_voidp),
             )
-        except:
+        except:  # noqa: E722 do not use bare except
             p.send_signal(signal.SIGTERM)
             p.wait(1)
             p.kill()
