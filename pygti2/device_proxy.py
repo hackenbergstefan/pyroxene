@@ -172,38 +172,45 @@ class VarProxyStruct(VarProxy):
 #         )
 
 
-# class LibProxy:
-#     def __init__(self, communication: device_commands.PyGti2Command, memory_manager=None):
-#         self._proxy = communication
-#         self.memory_manager = memory_manager
-#         self.endian = "little" if CType.dwarf.config.little_endian else "big"
-#         self.sizeof_long = communication.sizeof_long = CType.get("long unsigned int").size
+class LibProxy:
+    def __init__(self, backend: ElfBackend, com: Communicator, memory_manager=None):
+        self.backend = backend
+        self.com = com
+        self.memory_manager = memory_manager
 
-#         if self.sizeof_long != CType.dwarf.config.default_address_size:
-#             raise ValueError("sizeof(void *) != sizeof(unsigned long)")
+    def __getattr__(self, name):
+        type = self.backend.types[name]
+        if type.kind != "variable":
+            raise TypeError(f"Not a variable: {type}")
+        return VarProxy.new(
+            self.backend,
+            self.com,
+            type.type,
+            type.address,
+            getattr(type.type, "length", -1),
+        )
 
-#     def __getattr__(self, name):
-#         type = CType.get(name)
-#         if type is not None:
-#             if isinstance(type, CTypeEnumValue):
-#                 return type.value
-#             if isinstance(type, CTypeFunction):
-#                 return ElfFuncProxy(self, name)
-#             if isinstance(type, CTypeMacro):
-#                 return type.value
-#         return ElfVarProxy(self, name)
+    def _new(self, type: Union[CType, str], address: int, *args):
+        length = -1
+        if isinstance(type, str):
+            type = self.backend.type_from_string(type)
+            if type.kind == "array":
+                length = type.length
+        return VarProxy.new(self.backend, self.com, type, address, length)
 
-#     def _new(self, type: Union[CType, str], addr: int, *args):
-#         return NewVarProxy(self, type, addr)
+    def new(self, type: Union[CType, str]):
+        var = self._new(type, 0)
+        self.memory_manager.malloc(var)
+        return var
 
-#     def new(self, type: Union[CType, str]):
-#         newvar = NewVarProxy(self, type, 0)
-#         self.memory_manager.malloc(newvar)
-#         return newvar
+    def memset(self, addr: Union[VarProxy, int], value: int, length: int):
+        if isinstance(addr, VarProxy):
+            addr = addr.address
+        self.com.memory_write(addr, length * bytes([value]))
 
-#     def memset(self, addr: int, value: int, length: int):
-#         self._proxy.memory_write(addr, length * bytes([value]))
+    def memcpy(self, destination: int, source: int, length: int):
+        content = self.com.memory_read(source, length)
+        self.com.memory_write(destination, content)
 
-#     def memcpy(self, destination: int, source: int, length: int):
-#         content = self._proxy.memory_read(source, length)
-#         self._proxy.memory_write(destination, content)
+    def sizeof(self, var: VarProxy):
+        return var.length * var.type.size if var.length != -1 else var.type.size

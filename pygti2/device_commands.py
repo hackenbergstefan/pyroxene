@@ -10,6 +10,9 @@ class Communicator:
     def memory_write(self, addr: int, data: bytes) -> None:
         raise NotImplementedError("Abstract.")
 
+    def call(self, addr: int, numbytes_return: int, args: List[int]) -> int:
+        raise NotImplementedError("Abstract.")
+
 
 class CommunicatorStub(Communicator):
     def __init__(self):
@@ -27,9 +30,7 @@ class CommunicatorStub(Communicator):
             self.memory[addr + i] = b
 
 
-class PyGti2Command:
-    sizeof_long = 4
-
+class Gti2Communicactor(Communicator):
     def marshal_long(self, x: int) -> bytes:
         return x.to_bytes(self.sizeof_long, "big")
 
@@ -53,16 +54,17 @@ class PyGti2Command:
         return self.unmarshal_long(result)
 
     def memory_read(self, addr: int, size: int) -> bytes:
+        logging.getLogger(__name__).debug(f"PyGti2Command.memory_read 0x{addr:08x}, {size}")
         result = self.command(
             1,
             self.marshal_long(addr) + self.marshal_long(size),
             size,
         )
-        logging.getLogger(__name__).debug(f"PyGti2Command.memory_read {addr}, {size} -> {result}")
+        logging.getLogger(__name__).debug(f"PyGti2Command.memory_read 0x{addr:08x}, {size} -> {result.hex()}")
         return result
 
     def memory_write(self, addr: int, data: bytes) -> None:
-        logging.getLogger(__name__).debug(f"PyGti2Command.memory_write {addr}, {data}")
+        logging.getLogger(__name__).debug(f"PyGti2Command.memory_write 0x{addr:08x}, {data.hex()}")
         return self.command(2, self.marshal_long(addr) + data, 0)
 
     def echo(self, data: bytes) -> bytes:
@@ -71,8 +73,9 @@ class PyGti2Command:
         return result
 
 
-class SerialCommand(PyGti2Command):
-    def __init__(self, port, baud):
+class Gti2SerialCommunicator(Gti2Communicactor):
+    def __init__(self, port, baud, sizeof_long):
+        self.sizeof_long = sizeof_long
         import serial
 
         self.ser = serial.Serial(port, baud)
@@ -90,8 +93,9 @@ class SerialCommand(PyGti2Command):
         self.ser.write(data)
 
 
-class SocketCommand(PyGti2Command):
-    def __init__(self, address):
+class Gti2SocketCommunicator(Gti2Communicactor):
+    def __init__(self, address, sizeof_long):
+        self.sizeof_long = sizeof_long
         import socket
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -104,3 +108,6 @@ class SocketCommand(PyGti2Command):
 
     def write(self, data):
         self.sock.sendall(data)
+
+    def __del__(self):
+        self.sock.close()

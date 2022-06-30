@@ -220,14 +220,18 @@ class CTypeVariable(CType):
 
     @classmethod
     def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypeVariable":
+        location = None
+        if "DW_AT_specification" in die.attributes:
+            location = loc2addr(die)
+            die = die.get_DIE_from_attribute("DW_AT_specification")
         type = backend.type_from_die(die.get_DIE_from_attribute("DW_AT_type"))
-        return CTypeVariable(backend, die, type)
+        return CTypeVariable(backend, die, type, location)
 
-    def __init__(self, backend: "ElfBackend", die: DIE, type: CType):
+    def __init__(self, backend: "ElfBackend", die: DIE, type: CType, location: int = None):
         super().__init__(backend, die)
         self.kind = "variable"
         self.type = type
-        self.address = loc2addr(die)
+        self.address = location if location is not None else loc2addr(die)
         self.size = type.size
 
 
@@ -256,9 +260,15 @@ class CTypeFunction(CType):
 
 
 class ElfBackend:
-    def __init__(self, file: str, readelf_binary="readelf", compilation_unit_filter=lambda _: True):
+    def __init__(
+        self,
+        file: str,
+        readelf_binary="readelf",
+        compilation_unit_filter=lambda _: True,
+        tolerant: bool = True,
+    ):
         self.types = {}
-        self._create(file, readelf_binary, compilation_unit_filter)
+        self._create(file, readelf_binary, compilation_unit_filter, tolerant)
 
     def type_from_die(self, die: DIE):
         if die.tag == "DW_TAG_base_type":
@@ -286,7 +296,13 @@ class ElfBackend:
             self.types[type.typename] = type
             return type
 
-    def _create(self, file: str, readelf_binary="readelf", compilation_unit_filter=lambda _: True):
+    def _create(
+        self,
+        file: str,
+        readelf_binary="readelf",
+        compilation_unit_filter=lambda _: True,
+        tolerant=True,
+    ):
         with open(file, "rb") as fp:
             self.elffile: ELFFile = ELFFile(fp)
             self.dwarfinfo: DWARFInfo = self.elffile.get_dwarf_info()
@@ -297,7 +313,15 @@ class ElfBackend:
                 if not compilation_unit_filter(cuname):
                     continue
                 for die in cu.iter_DIEs():
-                    self.type_from_die(die)
+                    if tolerant:
+                        try:
+                            self.type_from_die(die)
+                        except:
+                            # if "DW_AT_name" in die.attributes:
+                            #     print("Failed: ", cuname, die.attributes["DW_AT_name"].value.decode())
+                            pass
+                    else:
+                        self.type_from_die(die)
 
     def type_from_string(self, decl: str):
         if decl in self.types:

@@ -31,7 +31,7 @@ def compile(source: str, cmdline="gcc -c -g {infile} -o {outfile}", print_output
                     cwd=tmpdir,
                 ).decode()
             )
-        return ElfBackend(os.path.join(tmpdir, "src.o"))
+        return ElfBackend(os.path.join(tmpdir, "src.o"), tolerant=False)
 
 
 class TestCTypeGcc(unittest.TestCase):
@@ -62,7 +62,7 @@ class TestCTypeGcc(unittest.TestCase):
 
         for sign in ("unsigned", "signed"):
             typ: CTypeBaseType = elf.types[f"{sign} char"]
-            self.assertEqual(typ.kind, "byte")
+            self.assertEqual(typ.kind, "int")
             self.assertEqual(typ.size, 1)
 
     def test_stdint(self):
@@ -77,7 +77,7 @@ class TestCTypeGcc(unittest.TestCase):
             cmdline=self.compiler_cmdline,
         )
         typ: CTypeTypedef = elf.types["uint8_t"]
-        self.assertEqual(typ.kind, "byte")
+        self.assertEqual(typ.kind, "int")
         self.assertEqual(typ.size, 1)
 
         for size in (2, 4, 8):
@@ -96,11 +96,11 @@ class TestCTypeGcc(unittest.TestCase):
             """,
             cmdline=self.compiler_cmdline,
         )
-        typ: CTypeStruct = elf.types["a"]
+        typ: CTypeStruct = elf.types["struct a"]
         self.assertEqual(typ.kind, "struct")
         self.assertEqual(typ.size, 0)
 
-        typ: CTypeStruct = elf.types["b"]
+        typ: CTypeStruct = elf.types["struct b"]
         self.assertEqual(typ.kind, "struct")
         self.assertEqual(typ.size, 2)
         self.assertEqual(len(typ.members), 2)
@@ -121,13 +121,13 @@ class TestCTypeGcc(unittest.TestCase):
             """,
             cmdline=self.compiler_cmdline,
         )
-        typ: CTypeStruct = elf.types["b"]
+        typ: CTypeStruct = elf.types["struct b"]
         self.assertEqual(typ.kind, "struct")
         self.assertEqual(typ.size, 0)
         self.assertEqual(len(typ.members), 1)
         (offset, membertyp) = typ.members["_a"]
         self.assertEqual(offset, 0)
-        self.assertEqual(membertyp, elf.types["a"])
+        self.assertEqual(membertyp, elf.types["struct a"])
 
     def test_typedefstruct(self):
         elf = compile(
