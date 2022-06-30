@@ -316,7 +316,7 @@ class ElfBackend:
                     if tolerant:
                         try:
                             self.type_from_die(die)
-                        except:
+                        except:  # noqa: E722 do not use bare except
                             # if "DW_AT_name" in die.attributes:
                             #     print("Failed: ", cuname, die.attributes["DW_AT_name"].value.decode())
                             pass
@@ -327,7 +327,8 @@ class ElfBackend:
         if decl in self.types:
             return self.types[decl]
         match = re.match(
-            r"^(?P<base_pointer>[\w ]+\w(?: ?\*)*) ?\*$|^(?P<base_array>[\w ]+\w) ?\[(?P<array_length>\d+)\]$",
+            r"^(?P<base_pointer>[\w ]+\w(?: ?\*)*) ?\*$|"
+            r"^(?P<base_array>[\w ]+\w) ?\[(?P<array_length>\d+)\]$",
             decl,
         )
         if not match:

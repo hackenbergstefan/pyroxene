@@ -90,5 +90,5 @@ void gti2_read(uint8_t *buffer, size_t length)
 
 void gti2_write(uint8_t *buffer, size_t length)
 {
-    write(gtisocket, buffer, length);
+    (void)!write(gtisocket, buffer, length);
 }
