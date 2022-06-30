@@ -114,3 +114,28 @@ class TestPyGti2(unittest.TestCase):
             var3 = lib._new("a_t *", lib.gti2_memory.address + 32)
             var3.a = var
             self.assertEqual(var3.a, 0xFF)
+
+    def test_function_call(self):
+        with compile(
+            """
+            #include <stdint.h>
+            int func1(void) { return 42; }
+            int func2(int a) { return 1 + a; }
+            int func3(int a, int b) { return 1 + a + b; }
+
+            uint64_t func4(uint64_t a) { return (uint64_t)~a; }
+            typedef struct {
+                uint32_t a;
+                uint32_t b;
+            } a_t;
+            a_t func5(uint32_t a, uint32_t b) { a_t x = { a, b }; return x; }
+            """,
+        ) as lib:
+            self.assertEqual(lib.func1(), 42)
+            self.assertEqual(lib.func2(41), 42)
+            self.assertEqual(lib.func3(21, 20), 42)
+            self.assertEqual(lib.func4(1), 0xFFFFFFFFFFFFFFFE)
+            self.assertEqual(lib.func4(0xFFFFFFFFFFFFFFFE), 1)
+            result = lib.func5(1, 2)
+            self.assertEqual(result.a, 1)
+            self.assertEqual(result.b, 2)

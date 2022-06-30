@@ -1,4 +1,4 @@
-from typing import Union
+from typing import List, Union
 from pygti2.device_commands import Communicator
 
 from pygti2.elfbackend import CType, ElfBackend
@@ -134,42 +134,61 @@ class VarProxyStruct(VarProxy):
         ).set_value(data)
 
 
-# class ElfFuncProxy:
-#     def __init__(self, libproxy: "LibProxy", name: str):
-#         self._libproxy = libproxy
-#         self._name = name
-#         self._type: CTypeFunction = CType.get(name)
-#         self._addr = self._type.addr
+class FuncProxy:
+    """FuncProxy behaves like a pointer to its type."""
 
-#     def __call__(self, *args):
-#         result = self._libproxy._proxy.call(
-#             self._addr,
-#             self._type.return_type.size if self._type.return_type else 0,
-#             self._marshal_args(*args),
-#         )
-#         if self._type.return_type is not None:
-#             return self._unmarshal_returntype(result)
+    __slots__ = ("lib", "backend", "com", "type", "address")
 
-#     def _marshal_args(self, *args) -> List[int]:
-#         """Converts all arguments to integers."""
-#         packed_args = []
-#         for arg in args:
-#             if isinstance(arg, int):
-#                 packed_args.append(arg)
-#             elif isinstance(arg, VarProxy):
-#                 packed_args.append(arg._type.marshal_int(arg))
-#             else:
-#                 ValueError(f"Cannot marshal {arg}")
-#         return packed_args
+    def __init__(self, lib: "LibProxy", backend: ElfBackend, com: Communicator, type: CType, address: int):
+        self.lib = lib
+        self.backend = backend
+        self.com = com
+        self.type = type
+        self.address = address
 
-#     def _unmarshal_returntype(self, result: int) -> Union[int, VarProxy]:
-#         if self._type.return_type.is_int:
-#             return result
-#         return NewVarProxy(
-#             self._libproxy,
-#             type=self._type.return_type,
-#             addr=result,
-#         )
+    def __call__(self, *args):
+        result = self.com.call(
+            self.address,
+            self.type.return_type.size if self.type.return_type else 0,
+            self.marshal_args(*args),
+        )
+        if self.type.return_type is not None:
+            return self.unmarshal_returntype(result)
+
+    def marshal_args(self, *args) -> List[int]:
+        """Converts all arguments to integers."""
+        packed_args = []
+        for arg in args:
+            if isinstance(arg, int):
+                packed_args.append(arg)
+            elif isinstance(arg, VarProxy):
+                if arg.type.kind == "int":
+                    packed_args.append(arg.get_value())
+                else:
+                    packed_args.append(arg.address)
+            else:
+                ValueError(f"Cannot marshal {arg}")
+        return packed_args
+
+    def unmarshal_returntype(self, result: int) -> Union[int, VarProxy]:
+        if self.type.return_type.kind == "int":
+            return result
+        try:
+            return VarProxy.new(
+                self.backend,
+                self.com,
+                self.type.return_type,
+                result,
+            )
+        except TypeError:
+            var = VarProxy.new2(
+                self.backend,
+                self.com,
+                self.type.return_type,
+                self.lib.gti2_memory.address,  # FIXME: Use self.lib.memory_manager
+            )
+            var.set_value(result)
+            return var
 
 
 class LibProxy:
@@ -180,15 +199,23 @@ class LibProxy:
 
     def __getattr__(self, name):
         type = self.backend.types[name]
-        if type.kind != "variable":
-            raise TypeError(f"Not a variable: {type}")
-        return VarProxy.new(
-            self.backend,
-            self.com,
-            type.type,
-            type.address,
-            getattr(type.type, "length", -1),
-        )
+        if type.kind == "variable":
+            return VarProxy.new(
+                self.backend,
+                self.com,
+                type.type,
+                type.address,
+                getattr(type.type, "length", -1),
+            )
+        if type.kind == "function":
+            return FuncProxy(
+                self,
+                self.backend,
+                self.com,
+                type,
+                type.address,
+            )
+        raise TypeError(f"Neither variable or function: {type}")
 
     def _new(self, type: Union[CType, str], address: int, *args):
         length = -1

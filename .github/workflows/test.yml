@@ -12,19 +12,10 @@ jobs:
       uses: actions/setup-python@v1
       with:
         python-version: 3.8
-    - name: Compile host example
-      run: |
-        pushd test/host
-        make host_test
-        popd
     - name: Install dependencies
       run: |
-        sudo apt install gdb
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     - name: Test
       run: |
-        ./test/host/host_test &
-        pid=$!
-        python runtests.py -v
-        kill -SIGTERM $!
+        python runtests.py -v test.test_elfbackend test.test_device_proxy test.test_gti2
