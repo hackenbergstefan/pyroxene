@@ -138,3 +138,12 @@ class TestPyGti2(unittest.TestCase):
             result = lib.func5(1, 2)
             self.assertEqual(result.a, 1)
             self.assertEqual(result.b, 2)
+
+    def test_consts(self):
+        with compile(
+            """
+            #include <stdint.h>
+            const uint32_t X = 42;
+            """,
+        ) as lib:
+            self.assertEqual(lib.X[0], 42)

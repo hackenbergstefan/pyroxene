@@ -259,6 +259,19 @@ class TestCTypeGcc(unittest.TestCase):
         self.assertEqual(typ.return_type, elf.types["uint32_t"])
         self.assertEqual(typ.arguments, [elf.types["uint8_t"], elf.types["uint32_t"]])
 
+    def test_const(self):
+        elf = compile(
+            """
+            #include <stdint.h>
+            const uint32_t X = 42;
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        typ: CTypeVariable = elf.types["X"]
+        self.assertIsInstance(typ, CTypeVariable)
+        self.assertEqual(typ.kind, "variable")
+        self.assertEqual(typ.address, 0)
+
 
 class TestCTypeGccArm(TestCTypeGcc):
     compiler_cmdline = "arm-none-eabi-gcc -c -g {infile} -o {outfile}"
