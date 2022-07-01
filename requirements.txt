@@ -1,4 +1,6 @@
 hypothesis
+pcpp
+pycparser
 pygdbmi
 pyserial
 git+https://github.com/eliben/pyelftools

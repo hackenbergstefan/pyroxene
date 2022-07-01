@@ -224,7 +224,10 @@ class CTypeVariable(CType):
         if "DW_AT_specification" in die.attributes:
             location = loc2addr(die)
             die = die.get_DIE_from_attribute("DW_AT_specification")
-        type = backend.type_from_die(die.get_DIE_from_attribute("DW_AT_type"))
+        typedie = die.get_DIE_from_attribute("DW_AT_type")
+        if typedie.tag == "DW_TAG_const_type":
+            typedie = typedie.get_DIE_from_attribute("DW_AT_type")
+        type = backend.type_from_die(typedie)
         return CTypeVariable(backend, die, type, location)
 
     def __init__(self, backend: "ElfBackend", die: DIE, type: CType, location: int = None):

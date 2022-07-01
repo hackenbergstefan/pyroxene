@@ -1,4 +1,5 @@
 from typing import List, Union
+from pygti2.companion_generator import GTI2_COMPANION_PREFIX
 from pygti2.device_commands import Communicator
 
 from pygti2.elfbackend import CType, ElfBackend
@@ -198,14 +199,27 @@ class LibProxy:
         self.memory_manager = memory_manager
 
     def __getattr__(self, name):
-        type = self.backend.types[name]
+        if name in self.backend.types:
+            type = self.backend.types[name]
+        elif GTI2_COMPANION_PREFIX + name in self.backend.types:
+            type = self.backend.types[GTI2_COMPANION_PREFIX + name]
+        else:
+            raise TypeError(f"Unknown type: {name}")
+
         if type.kind == "variable":
-            return VarProxy.new(
+            address = type.address
+            if type.type.kind == "array":
+                length = type.type.length
+                type = type.type.base
+            else:
+                type = type.type
+                length = -1
+            return VarProxy.new2(
                 self.backend,
                 self.com,
-                type.type,
-                type.address,
-                getattr(type.type, "length", -1),
+                type,
+                address,
+                length,
             )
         if type.kind == "function":
             return FuncProxy(
