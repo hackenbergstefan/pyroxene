@@ -17,6 +17,10 @@ class TestCompanionGenerator(unittest.TestCase):
             {
                 return 1 + a + b;
             }
+            inline const char *func3(void)
+            {
+                return "abc";
+            }
             """
         src += "\n" + CompanionGenerator().parse_and_generate_companion_source(src)
         with compile(src) as lib:
@@ -25,6 +29,9 @@ class TestCompanionGenerator(unittest.TestCase):
 
             self.assertEqual(lib.func2(20, 21), 42)
             self.assertEqual(lib._gti2_func2(20, 21), 42)
+
+            self.assertEqual(bytes(lib.func3()[0:3]), b"abc")
+            self.assertEqual(bytes(lib._gti2_func3()[0:3]), b"abc")
 
     def test_numeric_defines(self):
         src = """
@@ -41,6 +48,7 @@ class TestCompanionGenerator(unittest.TestCase):
         src = """
             #include <stdint.h>
             // Functions
+            int func(void);
             int func(void)
             {
                 return 0;

@@ -28,8 +28,14 @@ class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
     def visit_FuncDef(self, n):
         if "inline" not in n.decl.funcspec:
             return ""
-        n.decl.type.type.declname = f"{GTI2_COMPANION_PREFIX}{n.decl.name}"
+        # Patch name
+        functypedecl = n.decl.type
+        while not isinstance(functypedecl, pycparser.c_ast.TypeDecl):
+            functypedecl = functypedecl.type
+        functypedecl.declname = f"{GTI2_COMPANION_PREFIX}{n.decl.name}"
+        # Read parameters
         params = ",".join(p.name for p in n.decl.type.args.params if p.name is not None)
+        # Create function definition
         result = " ".join(
             (
                 GTI2_COMPANION_FUNC_DECL_FLAGS,
