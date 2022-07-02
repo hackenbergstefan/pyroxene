@@ -46,10 +46,7 @@ class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
         return result
 
     def visit_Decl(self, n, *args, **kwargs):
-        if not isinstance(n.type, pycparser.c_ast.FuncDecl):
-            return ""
-        else:
-            return super().visit_Decl(n, *args, **kwargs)
+        return ""
 
     def visit_Typedef(self, n):
         return ""
@@ -125,9 +122,8 @@ class CompanionGenerator:
         return sysincludepaths, defaultinclude, sysmacros
 
     def parse(self, additional_src: str = None):
-        defaultinclude = []
         if self.auto_sysincludes:
-            sysincludes, defaultinclude, sysmacros = self.resolve_sysinclude_paths()
+            sysincludes, _, sysmacros = self.resolve_sysinclude_paths()
             for inc in sysincludes:
                 self.preprocessor.add_path(inc)
             for macro in sysmacros:
@@ -152,9 +148,19 @@ class CompanionGenerator:
         return InlineFunctionGenerator().visit(parsed) + "\n"
 
     def generate_companion_numeric_macros(self):
+        includes_abspath = [os.path.abspath(inc) for inc in self.include_paths]
+
+        def macro_source_in_includes(src):
+            src = os.path.abspath(src)
+            return any([src.startswith(p) for p in includes_abspath])
+
         src = ""
         for macro in self.preprocessor.macros.values():
-            if macro.source is not None and macro.source not in self.src_files:
+            if (
+                macro.source is not None
+                and macro.source not in self.src_files
+                and not macro_source_in_includes(macro.source)
+            ):
                 continue
             if macro.arglist:
                 args = ",".join(f"unsigned long {a}" for a in macro.arglist)
