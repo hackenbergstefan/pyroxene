@@ -67,6 +67,44 @@ class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
         return s
 
 
+class MacroGenerator:
+    statement_indicator = re.compile(r"\b(if|else|while|do|void|inline|__attribute__)\b|#|{|}")
+
+    def __init__(self, macro, preprocessor: Preprocessor):
+        self.macro = macro
+        self.has_args = self.macro.arglist is not None and len(self.macro.arglist) > 0
+        self.is_empty = len(self.macro.value) == 0
+        self.preprocessor = preprocessor
+        if not self.is_empty:
+            self.compiled = "".join(tok.value for tok in preprocessor.expand_macros(macro.value))
+            if not self.compiled.strip():
+                self.is_empty = True
+
+    def _generate_code_const(self):
+        return (
+            f"{GTI2_COMPANION_CONST_DECL_FLAGS} const unsigned long "
+            f"{GTI2_COMPANION_PREFIX}{self.macro.name} = {self.macro.name};\n"
+        )
+
+    def _generate_code_function_with_args(self):
+        args = ",".join(f"unsigned long {a}" for a in self.macro.arglist)
+        return (
+            f"{GTI2_COMPANION_FUNC_DECL_FLAGS} unsigned long "
+            f"{GTI2_COMPANION_PREFIX}{self.macro.name}({args}) "
+            f"{{ return {self.macro.name}({','.join(self.macro.arglist)}); }}\n"
+        )
+
+    def generate_code(self):
+        if self.is_empty:
+            return ""
+        elif self.statement_indicator.search(self.compiled):
+            return ""  # TODO: Can we generate code safely?
+        elif self.has_args:
+            return self._generate_code_function_with_args()
+
+        return self._generate_code_const()
+
+
 class CompanionGenerator:
     default_sysincludes = ["/usr/include"]
     default_defines = [("__extension__", ""), ("__attribute__(x)", "")]
@@ -156,24 +194,15 @@ class CompanionGenerator:
 
         src = ""
         for macro in self.preprocessor.macros.values():
+            # Check if macro was defined either in src_files or somewhere in include_paths
             if (
                 macro.source is not None
                 and macro.source not in self.src_files
                 and not macro_source_in_includes(macro.source)
             ):
                 continue
-            if macro.arglist:
-                args = ",".join(f"unsigned long {a}" for a in macro.arglist)
-                src += (
-                    f"{GTI2_COMPANION_FUNC_DECL_FLAGS} unsigned long "
-                    f"{GTI2_COMPANION_PREFIX}{macro.name}({args}) "
-                    f"{{ return {macro.name}({','.join(macro.arglist)}); }}\n"
-                )
-            else:
-                src += (
-                    f"{GTI2_COMPANION_CONST_DECL_FLAGS} const unsigned long "
-                    f"{GTI2_COMPANION_PREFIX}{macro.name} = {macro.name};\n"
-                )
+
+            src += MacroGenerator(macro, self.preprocessor).generate_code()
 
         return src + "\n"
 

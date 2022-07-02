@@ -61,3 +61,24 @@ class TestCompanionGenerator(unittest.TestCase):
             """
         src = CompanionGenerator().parse_and_generate_companion_source(src)
         self.assertEqual(src.strip(), "")
+
+    def test_empty_macro(self):
+        src = """
+            #include <stdint.h>
+            #define JUST_A_DEFINE
+            """
+        src = CompanionGenerator().parse_and_generate_companion_source(src)
+        self.assertEqual(src.strip(), "")
+
+    def test_statement_macros(self):
+        src = """
+            #include <stdint.h>
+            #define loop_forever while(1);
+            #define macro_1 __attribute__((macro))
+            #define macro_2 inline
+            #define macro_3(x) __attribute__((macro ## x))
+            #define macro_4(x) macro ## x
+            #define macro_5 { {0} }
+            """
+        src = CompanionGenerator().parse_and_generate_companion_source(src)
+        self.assertEqual(src.strip(), "")
