@@ -36,3 +36,20 @@ class TestCompanionGenerator(unittest.TestCase):
         with compile(src) as lib:
             self.assertEqual(lib.MACRO_1[0], 42)
             self.assertEqual(lib.MACRO_2(20, 21), 42)
+
+    def test_ignored(self):
+        src = """
+            #include <stdint.h>
+            // Functions
+            int func(void)
+            {
+                return 0;
+            }
+            // Forward declarations
+            extern int foo;
+            // Declarations
+            int foo_array[2];
+            static int foo = 42;
+            """
+        src = CompanionGenerator().parse_and_generate_companion_source(src)
+        self.assertEqual(src.strip(), "")
