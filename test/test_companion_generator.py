@@ -117,6 +117,7 @@ class TestCompanionGenerator(unittest.TestCase):
             #define macro_3(x) __attribute__((macro ## x))
             #define macro_4(x) macro ## x
             #define macro_5 { {0} }
+            #define macro_6(x) ((x) > 0 ? 1 : 0)
             """
         src = CompanionGenerator().parse_and_generate_companion_source(src)
         self.assertEqual(src.strip(), "")

@@ -88,7 +88,7 @@ class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
 
 
 class MacroGenerator:
-    statement_indicator = re.compile(r"\b(if|else|while|do|void|inline|__attribute__)\b|#|{|}")
+    statement_indicator = re.compile(r"\b(if|else|while|do|void|inline|__attribute__)\b|#|{|}|\?|:")
 
     def __init__(self, macro, preprocessor: Preprocessor):
         self.macro = macro
@@ -209,6 +209,8 @@ class CompanionGenerator:
         includes_abspath = [os.path.abspath(inc) for inc in self.include_paths]
 
         def macro_source_in_includes(src):
+            if src == "":
+                return False
             src = os.path.abspath(src)
             return any([src.startswith(p) for p in includes_abspath])
 
@@ -228,4 +230,8 @@ class CompanionGenerator:
 
     def parse_and_generate_companion_source(self, additional_src: str = None):
         parsed = self.parse(additional_src)
-        return self.generate_companion_inlines(parsed) + self.generate_companion_numeric_macros()
+        return (
+            "".join(f'#include "{inc}"\n' for inc in self.src_files)
+            + self.generate_companion_inlines(parsed)
+            + self.generate_companion_numeric_macros()
+        )
