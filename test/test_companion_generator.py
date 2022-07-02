@@ -82,6 +82,17 @@ class TestCompanionGenerator(unittest.TestCase):
             self.assertEqual(lib.MACRO_1[0], 42)
             self.assertEqual(lib.MACRO_2(20, 21), 42)
 
+    def test_string_defines(self):
+        src = """
+            #include <stdint.h>
+            #define MACRO_1 "abc"
+            #define MACRO_2(x) "abc" ## x
+            """
+        src += "\n" + CompanionGenerator().parse_and_generate_companion_source(src)
+        with compile(src) as lib:
+            self.assertEqual(bytes(lib.MACRO_1[0][0:3]), b"abc")
+            self.assertNotIn("_gti2_MACRO_2", lib.backend.types)
+
     def test_ignored(self):
         src = """
             #include <stdint.h>
