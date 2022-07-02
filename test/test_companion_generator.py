@@ -33,6 +33,44 @@ class TestCompanionGenerator(unittest.TestCase):
             self.assertEqual(bytes(lib.func3()[0:3]), b"abc")
             self.assertEqual(bytes(lib._gti2_func3()[0:3]), b"abc")
 
+    def test_inline_functions_returning_struct(self):
+        src = """
+            typedef struct {
+                int x;
+            } a_t;
+            inline a_t func1(void)
+            {
+                a_t a = {42};
+                return a;
+            }
+            inline a_t func2(int x)
+            {
+                a_t a = {x};
+                return a;
+            }
+            inline void func3(a_t *a)
+            {
+                a = 0;
+            }
+            inline const char *func4(void)
+            {
+                return "abc";
+            }
+            """
+        src += CompanionGenerator().parse_and_generate_companion_source(src)
+        with compile(src) as lib:
+            self.assertIn("_gti2_func1", lib.backend.types)
+            self.assertIn("_gti2_ptr_func1", lib.backend.types)
+            self.assertIn("_gti2_func2", lib.backend.types)
+            self.assertIn("_gti2_ptr_func2", lib.backend.types)
+            self.assertIn("_gti2_func3", lib.backend.types)
+            var = lib._new("a_t *", address=lib.gti2_memory.address)
+            lib._gti2_ptr_func1(var)
+            self.assertEqual(var.x, 42)
+            var = lib._new("char **", address=lib.gti2_memory.address)
+            lib._gti2_ptr_func4(var)
+            self.assertEqual(bytes(var[0][0:3]), b"abc")
+
     def test_numeric_defines(self):
         src = """
             #include <stdint.h>

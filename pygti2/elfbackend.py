@@ -257,7 +257,10 @@ class CTypeFunction(CType):
         self._create_argument_types()
 
     def _create_argument_types(self):
-        self.return_type = self.backend.type_from_die(self.die.get_DIE_from_attribute("DW_AT_type"))
+        if "DW_AT_type" in self.die.attributes:
+            self.return_type = self.backend.type_from_die(self.die.get_DIE_from_attribute("DW_AT_type"))
+        else:
+            self.return_type = None
         self.arguments = []
         for child in self.die.iter_children():
             if child.tag != "DW_TAG_formal_parameter":
