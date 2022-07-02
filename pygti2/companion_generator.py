@@ -16,6 +16,7 @@ class NullIO:
 
 
 GTI2_COMPANION_PREFIX = "_gti2_"
+GTI2_COMPANION_PREFIX_PTR = "_gti2_ptr_"
 GTI2_COMPANION_FUNC_DECL_FLAGS = "__attribute__((noinline,used))"
 GTI2_COMPANION_CONST_DECL_FLAGS = "__attribute__((used))"
 
@@ -25,25 +26,44 @@ class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
         super().__init__()
         self.default_generator = pycparser.c_generator.CGenerator()
 
-    def visit_FuncDef(self, n):
-        if "inline" not in n.decl.funcspec:
-            return ""
+    def _generate_funcdef_default(self, n: pycparser.c_ast.FuncDef):
         # Patch name
         functypedecl = n.decl.type
         while not isinstance(functypedecl, pycparser.c_ast.TypeDecl):
             functypedecl = functypedecl.type
         functypedecl.declname = f"{GTI2_COMPANION_PREFIX}{n.decl.name}"
+
         # Read parameters
         params = ",".join(p.name for p in n.decl.type.args.params if p.name is not None)
         # Create function definition
-        result = " ".join(
+        return " ".join(
             (
                 GTI2_COMPANION_FUNC_DECL_FLAGS,
                 self.default_generator.visit_FuncDecl(n.decl.type),
                 f"{{ return {n.decl.name}({params}); }}\n",
             )
         )
-        return result
+
+    def _generate_funcdef_ptr(self, n: pycparser.c_ast.FuncDef):
+        returntype = self.default_generator.visit(n.decl.type.type)
+        params = ",".join(p.name for p in n.decl.type.args.params if p.name is not None)
+        param_decl = self.default_generator.visit(n.decl.type.args)
+
+        if returntype == "void":
+            return ""
+        param_decl = f"{returntype} *_" + ("," + param_decl if param_decl != "void" else "")
+        return " ".join(
+            (
+                GTI2_COMPANION_FUNC_DECL_FLAGS,
+                f"void {GTI2_COMPANION_PREFIX_PTR}{n.decl.name}({param_decl})",
+                f"{{*_ = {n.decl.name}({params}); }}\n",
+            )
+        )
+
+    def visit_FuncDef(self, n):
+        if "inline" not in n.decl.funcspec:
+            return ""
+        return self._generate_funcdef_default(n) + "\n" + self._generate_funcdef_ptr(n)
 
     def visit_Decl(self, n, *args, **kwargs):
         return ""
