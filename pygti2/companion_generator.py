@@ -22,9 +22,11 @@ GTI2_COMPANION_CONST_DECL_FLAGS = "__attribute__((used))"
 
 
 class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
-    def __init__(self):
+    def __init__(self, companion_generator: "CompanionGenerator"):
         super().__init__()
         self.default_generator = pycparser.c_generator.CGenerator()
+        self.stub_calls = []
+        self.companion_generator = companion_generator
 
     def _generate_funcdef_default(self, n: pycparser.c_ast.FuncDef):
         # Patch name
@@ -66,6 +68,16 @@ class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
         return self._generate_funcdef_default(n) + "\n" + self._generate_funcdef_ptr(n)
 
     def visit_Decl(self, n, *args, **kwargs):
+        if isinstance(n.type, pycparser.c_ast.FuncDecl) and n.name in self.companion_generator.unprocessed:
+            params = []
+            for param in n.type.args.params:
+                if param.name is None:
+                    continue
+                elif isinstance(param.type, pycparser.c_ast.PtrDecl):
+                    params.append("NULL")
+                else:
+                    params.append("0")
+            self.stub_calls.append(f"{n.name}({','.join(params)});")
         return ""
 
     def visit_Typedef(self, n):
@@ -141,6 +153,7 @@ class CompanionGenerator:
 
         self.compiler = "gcc"
         self.preprocessor = Preprocessor()
+        self.inline_function_generator = InlineFunctionGenerator(self)
 
     def resolve_sysinclude_paths(self):
         env = os.environ.copy()
@@ -183,7 +196,7 @@ class CompanionGenerator:
                 sysmacros.append((name, definition))
         return sysincludepaths, defaultinclude, sysmacros
 
-    def parse(self, additional_src: str = None):
+    def preprocess(self, additional_src: str = ""):
         if self.auto_sysincludes:
             sysincludes, _, sysmacros = self.resolve_sysinclude_paths()
             for inc in sysincludes:
@@ -196,18 +209,28 @@ class CompanionGenerator:
         for name, value in self.defines:
             self.preprocessor.define(f"{name} {value}")
 
+        unprocessed = ""
         for file in self.src_files:
             with open(file) as fp:
-                self.preprocessor.parse(fp, source=file)
-        if additional_src is not None:
-            self.preprocessor.parse(additional_src)
+                unprocessed += fp.read() + "\n"
+        unprocessed += additional_src
+        self.preprocessor.parse(unprocessed)
         out = StringIO()
         self.preprocessor.write(out)
-        return out.getvalue()
+        preprocessed = out.getvalue()
+        # TODO: Include next seems to be a problem for pcpp
+        preprocessed = re.sub(r"^#include_next.*$", "", preprocessed, flags=re.M)
+        if "#include" in preprocessed:
+            raise Exception(
+                f"Include files not found: {re.findall(r'^(#include.*)$', preprocessed, flags=re.M)}"
+            )
+        self.preprocessed = preprocessed
+        self.unprocessed = unprocessed
+        return preprocessed
 
     def generate_companion_inlines(self, data: str):
         parsed = pycparser.CParser().parse(data)
-        return InlineFunctionGenerator().visit(parsed) + "\n"
+        return self.inline_function_generator.visit(parsed) + "\n"
 
     def generate_companion_numeric_macros(self):
         includes_abspath = [os.path.abspath(inc) for inc in self.include_paths]
@@ -232,10 +255,16 @@ class CompanionGenerator:
 
         return src + "\n"
 
-    def parse_and_generate_companion_source(self, additional_src: str = None):
-        parsed = self.parse(additional_src)
+    def parse_and_generate_companion_source(self, additional_src: str = ""):
+        parsed = self.preprocess(additional_src)
         return (
-            "".join(f'#include "{inc}"\n' for inc in self.src_files)
+            "#include <stdint.h>\n"
+            + "#include <stdlib.h>\n"
+            + "".join(f'#include "{inc}"\n' for inc in self.src_files)
             + self.generate_companion_inlines(parsed)
             + self.generate_companion_numeric_macros()
+            + '__attribute__((used, section("gti2"))) void _gti2_stubcalls(void) {\n'
+            + "gti2_memory[0] = 0;\n"
+            + "\n".join(self.inline_function_generator.stub_calls)
+            + "\n}"
         )

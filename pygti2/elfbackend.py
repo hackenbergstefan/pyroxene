@@ -100,7 +100,7 @@ class CTypePointer(CType):
 
     @classmethod
     def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypePointer":
-        if not "DW_AT_type" in die.attributes:
+        if "DW_AT_type" not in die.attributes:
             return CTypePointer(backend, None, backend.type_from_string("void"))
         basedie = die.get_DIE_from_attribute("DW_AT_type")
         if basedie.tag == "DW_TAG_const_type":
