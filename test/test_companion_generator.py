@@ -108,7 +108,7 @@ class TestCompanionGenerator(unittest.TestCase):
             int foo_array[2];
             static int foo = 42;
             """
-        src = CompanionGenerator().parse_and_generate_companion_source(src)
+        src = CompanionGenerator().parse_and_generate_companion_source(src, bare=True)
         self.assertEqual(src.strip(), "")
 
     def test_empty_macro(self):
@@ -116,7 +116,7 @@ class TestCompanionGenerator(unittest.TestCase):
             #include <stdint.h>
             #define JUST_A_DEFINE
             """
-        src = CompanionGenerator().parse_and_generate_companion_source(src)
+        src = CompanionGenerator().parse_and_generate_companion_source(src, bare=True)
         self.assertEqual(src.strip(), "")
 
     def test_statement_macros(self):
@@ -130,5 +130,5 @@ class TestCompanionGenerator(unittest.TestCase):
             #define macro_5 { {0} }
             #define macro_6(x) ((x) > 0 ? 1 : 0)
             """
-        src = CompanionGenerator().parse_and_generate_companion_source(src)
+        src = CompanionGenerator().parse_and_generate_companion_source(src, bare=True)
         self.assertEqual(src.strip(), "")

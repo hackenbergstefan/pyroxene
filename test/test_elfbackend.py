@@ -239,10 +239,16 @@ class TestCTypeGcc(unittest.TestCase):
             """
             #include <stdint.h>
             uint32_t x = 0;
+            const uint32_t y = 0;
             """,
             cmdline=self.compiler_cmdline,
         )
         typ: CTypeVariable = elf.types["x"]
+        self.assertEqual(typ.kind, "variable")
+        self.assertEqual(typ.type, elf.types["uint32_t"])
+        self.assertEqual(typ.size, 4)
+        self.assertEqual(typ.address, 0)
+        typ: CTypeVariable = elf.types["y"]
         self.assertEqual(typ.kind, "variable")
         self.assertEqual(typ.type, elf.types["uint32_t"])
         self.assertEqual(typ.size, 4)
@@ -253,6 +259,7 @@ class TestCTypeGcc(unittest.TestCase):
             """
             #include <stdint.h>
             uint32_t a(void) { }
+            const char *b(void) { }
             """,
             cmdline=self.compiler_cmdline,
         )
@@ -260,6 +267,10 @@ class TestCTypeGcc(unittest.TestCase):
         self.assertEqual(typ.kind, "function")
         self.assertEqual(typ.address, 0)
         self.assertEqual(typ.return_type, elf.types["uint32_t"])
+        self.assertEqual(typ.arguments, [])
+        typ: CTypeVariable = elf.types["b"]
+        self.assertEqual(typ.kind, "function")
+        self.assertEqual(typ.return_type, elf.types["char *"])
         self.assertEqual(typ.arguments, [])
 
     def test_predefined_function_with_arguments(self):

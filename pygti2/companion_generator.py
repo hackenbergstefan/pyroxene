@@ -255,16 +255,20 @@ class CompanionGenerator:
 
         return src + "\n"
 
-    def parse_and_generate_companion_source(self, additional_src: str = ""):
+    def parse_and_generate_companion_source(self, additional_src: str = "", bare: bool = False):
         parsed = self.preprocess(additional_src)
-        return (
-            "#include <stdint.h>\n"
-            + "#include <stdlib.h>\n"
-            + "".join(f'#include "{inc}"\n' for inc in self.src_files)
-            + self.generate_companion_inlines(parsed)
-            + self.generate_companion_numeric_macros()
-            + '__attribute__((used, section("gti2"))) void _gti2_stubcalls(void) {\n'
-            + "gti2_memory[0] = 0;\n"
-            + "\n".join(self.inline_function_generator.stub_calls)
-            + "\n}"
-        )
+        if bare:
+            return self.generate_companion_inlines(parsed) + self.generate_companion_numeric_macros()
+        else:
+            return (
+                "#include <stdint.h>\n"
+                + "#include <stdlib.h>\n"
+                + "extern uint8_t gti2_memory[];\n"
+                + "".join(f'#include "{inc}"\n' for inc in self.src_files)
+                + self.generate_companion_inlines(parsed)
+                + self.generate_companion_numeric_macros()
+                + '__attribute__((used, section("gti2"))) void _gti2_stubcalls(void) {\n'
+                + "gti2_memory[0] = 0;\n"
+                + "\n".join(self.inline_function_generator.stub_calls)
+                + "\n}"
+            )
