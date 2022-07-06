@@ -113,10 +113,12 @@ class MacroGenerator:
                 self.is_empty = True
 
     def _generate_code_const(self):
-        if any(tok.type == "CPP_STRING" for tok in self.preprocessor.expand_macros(self.macro.value)):
-            macrotype = lambda name: f"const char {name}[]"
-        else:
-            macrotype = lambda name: f"const unsigned long {name}"
+        def macrotype(name):
+            if any(tok.type == "CPP_STRING" for tok in self.preprocessor.expand_macros(self.macro.value)):
+                return f"const char {name}[]"
+            else:
+                return f"const unsigned long {name}"
+
         return (
             f"{GTI2_COMPANION_CONST_DECL_FLAGS} "
             f"{macrotype(GTI2_COMPANION_PREFIX+self.macro.name)} = {self.macro.name};\n"
