@@ -17,8 +17,8 @@ class NullIO:
 
 GTI2_COMPANION_PREFIX = "_gti2_"
 GTI2_COMPANION_PREFIX_PTR = "_gti2_ptr_"
-GTI2_COMPANION_FUNC_DECL_FLAGS = "__attribute__((noinline,used))"
-GTI2_COMPANION_CONST_DECL_FLAGS = "__attribute__((used))"
+GTI2_COMPANION_FUNC_DECL_FLAGS = '__attribute__((noinline, used, section(".gti2.text")))'
+GTI2_COMPANION_CONST_DECL_FLAGS = '__attribute__((used, section(".gti2.rodata")))'
 
 
 class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
@@ -114,12 +114,12 @@ class MacroGenerator:
 
     def _generate_code_const(self):
         if any(tok.type == "CPP_STRING" for tok in self.preprocessor.expand_macros(self.macro.value)):
-            macrotype = "const char *"
+            macrotype = lambda name: f"const char {name}[]"
         else:
-            macrotype = "const unsigned long"
+            macrotype = lambda name: f"const unsigned long {name}"
         return (
-            f"{GTI2_COMPANION_CONST_DECL_FLAGS} {macrotype} "
-            f"{GTI2_COMPANION_PREFIX}{self.macro.name} = {self.macro.name};\n"
+            f"{GTI2_COMPANION_CONST_DECL_FLAGS} "
+            f"{macrotype(GTI2_COMPANION_PREFIX+self.macro.name)} = {self.macro.name};\n"
         )
 
     def _generate_code_function_with_args(self):
@@ -267,7 +267,7 @@ class CompanionGenerator:
                 + "".join(f'#include "{inc}"\n' for inc in self.src_files)
                 + self.generate_companion_inlines(parsed)
                 + self.generate_companion_numeric_macros()
-                + '__attribute__((used, section("gti2"))) void _gti2_stubcalls(void) {\n'
+                + '__attribute__((used, section(".gti2.text"))) void _gti2_stubcalls(void) {\n'
                 + "gti2_memory[0] = 0;\n"
                 + "\n".join(self.inline_function_generator.stub_calls)
                 + "\n}"
