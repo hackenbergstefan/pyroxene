@@ -8,6 +8,8 @@ from elftools.elf.elffile import ELFFile
 
 
 def loc2addr(die: DIE):
+    if "DW_AT_location" not in die.attributes:
+        return None
     addr = die.attributes["DW_AT_location"].value
     if DW_OP_opcode2name[addr[0]] != "DW_OP_addr":
         raise ValueError("Not an address.")
@@ -60,8 +62,10 @@ class CTypeBaseType(CType):
     @classmethod
     def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypeBaseType":
         encoding = dw_at_encoding(die)
-        if encoding in ("(unsigned)", "(signed)", "(unsigned char)", "(signed char)"):
+        if encoding in ("(unsigned)", "(signed)", "(unsigned char)", "(signed char)", "(boolean)"):
             return CTypeBaseInt(backend, die)
+        elif encoding in ("(float)",):
+            return CTypeBaseFloat(backend, die)
         else:
             raise NotImplementedError(f"Unkown encoding: {encoding}")
 
@@ -76,20 +80,33 @@ class CTypeBaseInt(CTypeBaseType):
         self.kind = "int"
 
 
+class CTypeBaseFloat(CTypeBaseType):
+    """
+    Types with tag "DW_TAG_base_type" and float like encoding
+    """
+
+    def __init__(self, backend: "ElfBackend", die: DIE):
+        super().__init__(backend, die)
+        self.kind = "float"
+
+
 class CTypePointer(CType):
     def __init__(self, backend: "ElfBackend", die: DIE, base: CType):
         super().__init__(backend, die)
         self.kind = "pointer"
         self.base = base
-        if self.base.typename != "?":
+        if base is not None and self.base.typename != "?":
             self.typename = f"{self.base.typename} *"
 
     @classmethod
     def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypePointer":
+        if not "DW_AT_type" in die.attributes:
+            return CTypePointer(backend, None, backend.type_from_string("void"))
         basedie = die.get_DIE_from_attribute("DW_AT_type")
         if basedie.tag == "DW_TAG_const_type":
-            basedie = basedie.get_DIE_from_attribute("DW_AT_type")
-        base = backend.type_from_die(basedie)
+            base = backend.types["void"]
+        else:
+            base = backend.type_from_die(basedie)
         return CTypePointer(backend, die, base)
 
 
@@ -136,6 +153,8 @@ class CTypeTypedef(CType):
             return CTypeTypedefPointer(backend, die, base)
         elif base.kind == "array":
             return CTypeTypedefArray(backend, die, base)
+        elif base.kind == "union":
+            return CTypeTypedefUnion(backend, die, base)
         else:
             raise NotImplementedError(f"Unkown base kind: {base}")
 
@@ -164,7 +183,7 @@ class CTypeStruct(CType):
         self.kind = "struct"
         if self.typename != "?":
             self.typename = f"struct {self.typename}"
-        self._create_members(self.die)
+        # self._create_members(self.die)
 
     def _create_members(self, die):
         members = {}
@@ -173,10 +192,11 @@ class CTypeStruct(CType):
             if child.tag != "DW_TAG_member":
                 continue
             membertypedie = child.get_DIE_from_attribute("DW_AT_type")
-            if membertypedie != die:
-                membertype = self.backend.type_from_die(membertypedie)
-            else:
-                membertype = self
+            membertype = self.backend.type_from_die(membertypedie)
+            # if membertypedie != die:
+            #     membertype = self.backend.type_from_die(membertypedie)
+            # else:
+            #     membertype = self
             members[child.attributes["DW_AT_name"].value.decode()] = (
                 child.attributes["DW_AT_data_member_location"].value,
                 membertype,
@@ -191,7 +211,45 @@ class CTypeTypedefStruct(CTypeTypedef, CTypeStruct):
 
     def __init__(self, backend: "ElfBackend", die: DIE, base: CTypeStruct):
         CTypeTypedef.__init__(self, backend, die, base)
-        self.kind = "typedef struct"
+        self.kind = "struct"
+        self._create_members(self.base.die)
+
+
+class CTypeUnion(CType):
+    """
+    Types with tag "DW_TAG_union_type".
+    """
+
+    @classmethod
+    def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypeUnion":
+        return CTypeUnion(backend, die)
+
+    def __init__(self, backend: "ElfBackend", die: DIE):
+        super().__init__(backend, die)
+        self.kind = "union"
+        if self.typename != "?":
+            self.typename = f"union {self.typename}"
+
+    def _create_members(self, die):
+        members = {}
+        for child in die.iter_children():
+            child: DIE = child
+            if child.tag != "DW_TAG_member":
+                continue
+            membertypedie = child.get_DIE_from_attribute("DW_AT_type")
+            membertype = self.backend.type_from_die(membertypedie)
+            members[child.attributes["DW_AT_name"].value.decode()] = (0, membertype)
+        self.members = members
+
+
+class CTypeTypedefUnion(CTypeTypedef, CTypeUnion):
+    """
+    Types with tag "DW_TAG_typedef" and type CTypeUnionure.
+    """
+
+    def __init__(self, backend: "ElfBackend", die: DIE, base: CTypeUnion):
+        CTypeTypedef.__init__(self, backend, die, base)
+        self.kind = "union"
         self._create_members(self.base.die)
 
 
@@ -202,7 +260,7 @@ class CTypeTypedefPointer(CTypeTypedef, CTypePointer):
 
     def __init__(self, backend: "ElfBackend", die: DIE, base: CTypePointer):
         CTypeTypedef.__init__(self, backend, die, base)
-        self.kind = "typedef pointer"
+        self.kind = "pointer"
 
 
 class CTypeTypedefArray(CTypeTypedef, CTypeArray):
@@ -212,8 +270,20 @@ class CTypeTypedefArray(CTypeTypedef, CTypeArray):
 
     def __init__(self, backend: "ElfBackend", die: DIE, base: CTypeArray):
         CTypeTypedef.__init__(self, backend, die, base)
-        self.kind = "typedef array"
+        self.kind = "array"
         self.size = base.size
+
+
+class CTypeEnumeration(CType):
+    """
+    Types with tag "DW_TAG_enumeration_type".
+    """
+
+    @classmethod
+    def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypeBaseType":
+        type = CTypeEnumeration(backend, die)
+        type.kind = "int"
+        return type
 
 
 class CTypeVariable(CType):
@@ -248,15 +318,26 @@ class CTypeFunction(CType):
 
     @classmethod
     def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypeFunction":
+        if "DW_AT_low_pc" not in die.attributes:
+            # Functions without location are useless
+            return None
         return CTypeFunction(backend, die)
 
     def __init__(self, backend: "ElfBackend", die: DIE):
         super().__init__(backend, die)
         self.kind = "function"
-        self.address = die.attributes["DW_AT_low_pc"].value
-        self._create_argument_types()
+        if "DW_AT_abstract_origin" in die.attributes:
+            basedie = die.get_DIE_from_attribute("DW_AT_abstract_origin")
+        else:
+            basedie = die
 
-    def _create_argument_types(self):
+        if "DW_AT_low_pc" in die.attributes:
+            self.address = die.attributes["DW_AT_low_pc"].value
+        elif basedie is not None:
+            self.address = basedie.attributes["DW_AT_low_pc"].value
+        self._create_argument_types(basedie)
+
+    def _create_argument_types(self, die: DIE):
         if "DW_AT_type" in self.die.attributes:
             self.return_type = self.backend.type_from_die(self.die.get_DIE_from_attribute("DW_AT_type"))
         else:
@@ -265,7 +346,11 @@ class CTypeFunction(CType):
         for child in self.die.iter_children():
             if child.tag != "DW_TAG_formal_parameter":
                 continue
-            self.arguments.append(self.backend.type_from_die(child.get_DIE_from_attribute("DW_AT_type")))
+            if "DW_AT_type" in child.attributes:
+                argdie = child.get_DIE_from_attribute("DW_AT_type")
+            elif "DW_AT_abstract_origin" in child.attributes:
+                argdie = child.get_DIE_from_attribute("DW_AT_abstract_origin")
+            self.arguments.append(self.backend.type_from_die(argdie))
 
 
 class ElfBackend:
@@ -277,6 +362,9 @@ class ElfBackend:
         tolerant: bool = True,
     ):
         self.types = {}
+        self.enums = {}
+        self.types["void"] = voidtype = CTypeBaseType(self, None)
+        voidtype.typename = "void"
         self._create(file, readelf_binary, compilation_unit_filter, tolerant)
 
     def type_from_die(self, die: DIE):
@@ -286,6 +374,8 @@ class ElfBackend:
             type = CTypeTypedef._new(self, die)
         elif die.tag == "DW_TAG_structure_type":
             type = CTypeStruct._new(self, die)
+        elif die.tag == "DW_TAG_union_type":
+            type = CTypeUnion._new(self, die)
         elif die.tag == "DW_TAG_pointer_type":
             type = CTypePointer._new(self, die)
         elif die.tag == "DW_TAG_array_type":
@@ -294,15 +384,26 @@ class ElfBackend:
             type = CTypeVariable._new(self, die)
         elif die.tag == "DW_TAG_subprogram":
             type = CTypeFunction._new(self, die)
+        elif die.tag == "DW_TAG_enumeration_type":
+            type = CTypeEnumeration._new(self, die)
+        elif die.tag == "DW_TAG_enumerator":
+            self.enums[die.attributes["DW_AT_name"].value.decode()] = die.attributes[
+                "DW_AT_const_value"
+            ].value
+            return None
         else:
             return None
 
+        if type is None:
+            return None
         if type.typename == "?":
             return type
         if type.typename in self.types:
             return self.types[type.typename]
         else:
             self.types[type.typename] = type
+            if type.kind in ("struct", "union") and not hasattr(type, "members"):
+                type._create_members(type.die)
             return type
 
     def _create(
@@ -321,16 +422,17 @@ class ElfBackend:
                 cuname = cu.get_top_DIE().attributes["DW_AT_name"].value.decode()
                 if not compilation_unit_filter(cuname):
                     continue
+                depth = 0
                 for die in cu.iter_DIEs():
-                    if tolerant:
-                        try:
-                            self.type_from_die(die)
-                        except:  # noqa: E722 do not use bare except
-                            # if "DW_AT_name" in die.attributes:
-                            #     print("Failed: ", cuname, die.attributes["DW_AT_name"].value.decode())
-                            pass
-                    else:
+                    if die.is_null():
+                        depth -= 1
+                        continue
+                    if depth == 1:
+                        # if "DW_AT_name" in die.attributes:
+                        #     print(die.tag, die.attributes["DW_AT_name"].value.decode())
                         self.type_from_die(die)
+                    if die.has_children:
+                        depth += 1
 
     def type_from_string(self, decl: str):
         if decl in self.types:
