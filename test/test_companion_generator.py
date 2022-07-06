@@ -90,7 +90,7 @@ class TestCompanionGenerator(unittest.TestCase):
             """
         src += "\n" + CompanionGenerator().parse_and_generate_companion_source(src)
         with compile(src) as lib:
-            self.assertEqual(bytes(lib.MACRO_1[0][0:3]), b"abc")
+            self.assertEqual(bytes(lib.MACRO_1[0:3]), b"abc")
             self.assertNotIn("_gti2_MACRO_2", lib.backend.types)
 
     def test_ignored(self):

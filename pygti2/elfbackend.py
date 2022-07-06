@@ -423,6 +423,11 @@ class ElfBackend:
             type = CTypeFunction._new(self, die)
         elif die.tag == "DW_TAG_enumeration_type":
             type = CTypeEnumeration._new(self, die)
+        elif die.tag == "DW_TAG_const_type":
+            if "DW_AT_type" in die.attributes:
+                type = self.type_from_die(die.get_DIE_from_attribute("DW_AT_type"))
+            else:
+                type = self.types["void"]
         else:
             return None
 
