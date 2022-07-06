@@ -103,10 +103,11 @@ class CTypePointer(CType):
         if "DW_AT_type" not in die.attributes:
             return CTypePointer(backend, None, backend.type_from_string("void"))
         basedie = die.get_DIE_from_attribute("DW_AT_type")
-        if basedie.tag == "DW_TAG_const_type":
+        base = backend.type_from_die(basedie)
+        if base is None and "DW_AT_type" in basedie.attributes:
+            base = backend.type_from_die(basedie.get_DIE_from_attribute("DW_AT_type"))
+        if base is None:
             base = backend.types["void"]
-        else:
-            base = backend.type_from_die(basedie)
         return CTypePointer(backend, die, base)
 
 
