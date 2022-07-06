@@ -10,6 +10,7 @@ from pygti2.elfbackend import (
     CTypePointer,
     CTypeStruct,
     CTypeTypedef,
+    CTypeUnion,
     CTypeVariable,
     ElfBackend,
 )
@@ -271,6 +272,77 @@ class TestCTypeGcc(unittest.TestCase):
         self.assertIsInstance(typ, CTypeVariable)
         self.assertEqual(typ.kind, "variable")
         self.assertEqual(typ.address, 0)
+
+    def test_recursive_declarations(self):
+        elf = compile(
+            """
+            #include <stdint.h>
+            struct a;
+            struct a {
+                struct a *x;
+            } a_;
+
+            typedef struct b {
+                struct b *x;
+            } b_t;
+            b_t _;
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        typ: CTypeStruct = elf.types["struct a"]
+        self.assertIsInstance(typ.members["x"][1], CTypePointer)
+        self.assertEqual(typ.members["x"][1].base, typ)
+
+        typ: CTypeStruct = elf.types["b_t"]
+        self.assertIsInstance(typ.members["x"][1], CTypePointer)
+        self.assertEqual(typ.members["x"][1].base, typ.base)
+
+    def test_enums(self):
+        elf = compile(
+            """
+            #include <stdint.h>
+            enum a {
+                A_A,
+                A_B,
+                A_C = 0x1234,
+            };
+            enum a a_;
+
+            typedef enum {
+                B_A = 0xabcd,
+            } b_e;
+            b_e b_;
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        self.assertEqual(elf.enums["A_A"], 0)
+        self.assertEqual(elf.enums["A_B"], 1)
+        self.assertEqual(elf.enums["A_C"], 0x1234)
+        self.assertEqual(elf.enums["B_A"], 0xABCD)
+
+    def test_unions(self):
+        elf = compile(
+            """
+            union a {
+                int a;
+                int b;
+            };
+            union a a_;
+
+            typedef union {
+                int a;
+                int b;
+            } b_t;
+            b_t b_;
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        typ: CTypeUnion = elf.types["union a"]
+        self.assertIsInstance(typ, CTypeUnion)
+        self.assertEqual(typ.kind, "union")
+        typ: CTypeUnion = elf.types["b_t"]
+        self.assertIsInstance(typ, CTypeUnion)
+        self.assertEqual(typ.kind, "union")
 
 
 class TestCTypeGccArm(TestCTypeGcc):
