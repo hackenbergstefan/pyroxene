@@ -115,7 +115,10 @@ class CTypeArray(CType):
         super().__init__(backend, die)
         self.kind = "array"
         self.length = self._length(self.die)
-        self.size = self.length * base.size
+        if self.length == -1 or base.size == -1:
+            self.size = -1
+        else:
+            self.size = self.length * base.size
         self.base = base
 
     def _length(self, die: DIE):
@@ -124,12 +127,19 @@ class CTypeArray(CType):
         for child in die.iter_children():
             if child.tag != "DW_TAG_subrange_type":
                 continue
-            return child.attributes["DW_AT_upper_bound"].value + 1
+            if "DW_AT_upper_bound" in child.attributes:
+                return child.attributes["DW_AT_upper_bound"].value + 1
+            return -1
 
     @classmethod
     def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypeArray":
         base = backend.type_from_die(die.get_DIE_from_attribute("DW_AT_type"))
         return CTypeArray(backend, die, base)
+
+    def update(self, other: "CTypeArray"):
+        if self.length == -1 and other.length != -1:
+            self.length = other.length
+            self.size = other.size
 
 
 class CTypeTypedef(CType):
@@ -273,6 +283,11 @@ class CTypeTypedefArray(CTypeTypedef, CTypeArray):
         self.kind = "array"
         self.size = base.size
 
+    def update(self, other: "CTypeTypedefArray"):
+        if self.size == -1:
+            self.size = other.size
+            self.base.update(other.base)
+
 
 class CTypeEnumeration(CType):
     """
@@ -284,6 +299,19 @@ class CTypeEnumeration(CType):
         type = CTypeEnumeration(backend, die)
         type.kind = "int"
         return type
+
+    def __init__(self, backend: "ElfBackend", die: DIE):
+        super().__init__(backend, die)
+        self._create_enums(self.die)
+
+    def _create_enums(self, die):
+        for child in die.iter_children():
+            child: DIE = child
+            if child.tag != "DW_TAG_enumerator":
+                continue
+            self.backend.enums[child.attributes["DW_AT_name"].value.decode()] = child.attributes[
+                "DW_AT_const_value"
+            ].value
 
 
 class CTypeVariable(CType):
@@ -309,6 +337,14 @@ class CTypeVariable(CType):
         self.type = type
         self.address = location if location is not None else loc2addr(die)
         self.size = type.size
+
+    def update(self, other: "CTypeVariable"):
+        if self.address is None:
+            self.address = other.address
+            self.type = other.type
+        if self.size == -1:
+            self.size = other.size
+            self.type = other.type
 
 
 class CTypeFunction(CType):
@@ -386,11 +422,6 @@ class ElfBackend:
             type = CTypeFunction._new(self, die)
         elif die.tag == "DW_TAG_enumeration_type":
             type = CTypeEnumeration._new(self, die)
-        elif die.tag == "DW_TAG_enumerator":
-            self.enums[die.attributes["DW_AT_name"].value.decode()] = die.attributes[
-                "DW_AT_const_value"
-            ].value
-            return None
         else:
             return None
 
@@ -399,7 +430,10 @@ class ElfBackend:
         if type.typename == "?":
             return type
         if type.typename in self.types:
-            return self.types[type.typename]
+            other = self.types[type.typename]
+            if hasattr(other, "update"):
+                other.update(type)
+            return other
         else:
             self.types[type.typename] = type
             if type.kind in ("struct", "union") and not hasattr(type, "members"):
