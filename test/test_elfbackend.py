@@ -16,13 +16,20 @@ from pygti2.elfbackend import (
 )
 
 
-def compile(source: str, cmdline="gcc -c -g {infile} -o {outfile}", print_output=False):
+def compile(source: str, source2: str = "", cmdline="gcc -c -g {infile} -o {outfile}", print_output=False):
     with TemporaryDirectory() as tmpdir:
         with open(os.path.join(tmpdir, "src.c"), "w") as fp:
             fp.write(source)
 
+        with open(os.path.join(tmpdir, "src2.c"), "w") as fp:
+            fp.write(source2)
+
         subprocess.check_call(
             cmdline.format(infile="src.c", outfile="src.o").split(" "),
+            cwd=tmpdir,
+        )
+        subprocess.check_call(
+            cmdline.format(infile="src2.c", outfile="src2.o").split(" "),
             cwd=tmpdir,
         )
         if print_output:
@@ -32,7 +39,16 @@ def compile(source: str, cmdline="gcc -c -g {infile} -o {outfile}", print_output
                     cwd=tmpdir,
                 ).decode()
             )
-        return ElfBackend(os.path.join(tmpdir, "src.o"), tolerant=False)
+            print(
+                subprocess.check_output(
+                    "readelf.py --debug-dump=info src2.o".split(" "),
+                    cwd=tmpdir,
+                ).decode()
+            )
+        backend = ElfBackend(os.path.join(tmpdir, "src.o"), tolerant=False)
+        if source2:
+            backend._create(os.path.join(tmpdir, "src2.o"))
+        return backend
 
 
 class TestCTypeGcc(unittest.TestCase):
@@ -143,10 +159,10 @@ class TestCTypeGcc(unittest.TestCase):
             cmdline=self.compiler_cmdline,
         )
         typ: CTypeTypedef = elf.types["a_t"]
-        self.assertEqual(typ.kind, "typedef struct")
+        self.assertEqual(typ.kind, "struct")
         self.assertEqual(typ.size, 0)
         typ: CTypeTypedef = elf.types["b_t"]
-        self.assertEqual(typ.kind, "typedef struct")
+        self.assertEqual(typ.kind, "struct")
         self.assertEqual(typ.size, 1)
         self.assertIn("a", typ.members)
 
@@ -159,7 +175,7 @@ class TestCTypeGcc(unittest.TestCase):
             cmdline=self.compiler_cmdline,
         )
         typ: CTypeTypedef = elf.types["charp"]
-        self.assertEqual(typ.kind, "typedef pointer")
+        self.assertEqual(typ.kind, "pointer")
         self.assertEqual(typ.size, elf.sizeof_voidp)
 
     def test_typedefarray(self):
@@ -172,7 +188,7 @@ class TestCTypeGcc(unittest.TestCase):
             cmdline=self.compiler_cmdline,
         )
         typ: CTypeTypedef = elf.types["intarr"]
-        self.assertEqual(typ.kind, "typedef array")
+        self.assertEqual(typ.kind, "array")
         self.assertEqual(typ.size, 8)
 
     def test_decl_pointer(self):
@@ -343,6 +359,51 @@ class TestCTypeGcc(unittest.TestCase):
         typ: CTypeUnion = elf.types["b_t"]
         self.assertIsInstance(typ, CTypeUnion)
         self.assertEqual(typ.kind, "union")
+
+    def test_update(self):
+        elf = compile(
+            source="""
+            extern int a;
+            extern int b[];
+            void init(void) {
+                int _ = a;
+                _ = b[0];
+            }
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        typ: CTypeVariable = elf.types["a"]
+        self.assertEqual(typ.kind, "variable")
+        self.assertIsNone(typ.address)
+        typ: CTypeVariable = elf.types["b"]
+        self.assertEqual(typ.kind, "variable")
+        self.assertIsNone(typ.address)
+        self.assertEqual(typ.type.length, -1)
+        self.assertEqual(typ.size, -1)
+
+        elf = compile(
+            source="""
+            extern int a;
+            extern int b[];
+            void init(void) {
+                int _ = a;
+                _ = b[0];
+            }
+            """,
+            source2="""
+            int a = 5;
+            int b[10];
+            """,
+            cmdline=self.compiler_cmdline,
+        )
+        typ: CTypeVariable = elf.types["a"]
+        self.assertEqual(typ.kind, "variable")
+        self.assertEqual(typ.address, 0)
+        typ: CTypeVariable = elf.types["b"]
+        self.assertEqual(typ.kind, "variable")
+        self.assertEqual(typ.address, 0)
+        self.assertEqual(typ.type.length, 10)
+        self.assertEqual(typ.size, typ.type.size)
 
 
 class TestCTypeGccArm(TestCTypeGcc):

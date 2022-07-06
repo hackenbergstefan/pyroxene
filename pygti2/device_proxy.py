@@ -40,7 +40,7 @@ class VarProxy:
         self.length = length
 
     def __repr__(self) -> str:
-        return f"<{self.__class__.__name__} {self.type}[{self.length}] @ 0x{self.address:08x}>"
+        return f"<{self.__class__.__name__} {self.type}[{self.length}] @ 0x{self.address or 0:08x}>"
 
     def _getitem_single(self, index):
         newvarproxy = self.new2(
