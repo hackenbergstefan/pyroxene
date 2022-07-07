@@ -409,10 +409,10 @@ class TestCTypeGcc(unittest.TestCase):
         )
         typ: CTypeVariable = elf.types["a"]
         self.assertEqual(typ.kind, "variable")
-        self.assertEqual(typ.address, 0)
+        self.assertIsInstance(typ.address, int)
         typ: CTypeVariable = elf.types["b"]
         self.assertEqual(typ.kind, "variable")
-        self.assertEqual(typ.address, 0)
+        self.assertIsInstance(typ.address, int)
         self.assertEqual(typ.type.length, 10)
         self.assertEqual(typ.size, typ.type.size)
 

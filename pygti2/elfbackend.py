@@ -155,6 +155,8 @@ class CTypeTypedef(CType):
 
     @classmethod
     def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypeTypedef":
+        if "DW_AT_type" not in die.attributes:
+            return None
         base = backend.type_from_die(die.get_DIE_from_attribute("DW_AT_type"))
         if base.kind == "int":
             return CTypeTypedefInt(backend, die, base)
