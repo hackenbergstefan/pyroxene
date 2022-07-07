@@ -62,8 +62,10 @@ class CTypeBaseType(CType):
     @classmethod
     def _new(cls, backend: "ElfBackend", die: DIE) -> "CTypeBaseType":
         encoding = dw_at_encoding(die)
-        if encoding in ("(unsigned)", "(signed)", "(unsigned char)", "(signed char)", "(boolean)"):
+        if encoding in ("(unsigned)", "(unsigned char)", "(boolean)"):
             return CTypeBaseInt(backend, die)
+        elif encoding in ("(signed)", "(signed char)"):
+            return CTypeBaseInt(backend, die, signed=True)
         elif encoding in ("(float)",):
             return CTypeBaseFloat(backend, die)
         else:
@@ -75,9 +77,10 @@ class CTypeBaseInt(CTypeBaseType):
     Types with tag "DW_TAG_base_type" and integer like encoding
     """
 
-    def __init__(self, backend: "ElfBackend", die: DIE):
+    def __init__(self, backend: "ElfBackend", die: DIE, signed: bool = False):
         super().__init__(backend, die)
         self.kind = "int"
+        self.signed = signed
 
 
 class CTypeBaseFloat(CTypeBaseType):
@@ -180,6 +183,8 @@ class CTypeTypedefInt(CTypeTypedef):
     def __init__(self, backend: "ElfBackend", die: DIE, base: CTypeBaseType):
         super().__init__(backend, die, base)
         self.kind = "int"
+        if hasattr(base, "signed"):
+            self.signed = base.signed
 
 
 class CTypeStruct(CType):

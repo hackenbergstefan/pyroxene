@@ -86,16 +86,23 @@ class TestCTypeGcc(unittest.TestCase):
         elf = compile(
             """
             #include <stdint.h>
-            uint8_t a;
-            uint16_t b;
-            uint32_t c;
-            uint64_t d;
+            int8_t a;
+            uint8_t b;
+            uint16_t c;
+            uint32_t d;
+            uint64_t e;
             """,
             cmdline=self.compiler_cmdline,
         )
         typ: CTypeTypedef = elf.types["uint8_t"]
         self.assertEqual(typ.kind, "int")
         self.assertEqual(typ.size, 1)
+        self.assertEqual(typ.signed, False)
+
+        typ: CTypeTypedef = elf.types["int8_t"]
+        self.assertEqual(typ.kind, "int")
+        self.assertEqual(typ.size, 1)
+        self.assertEqual(typ.signed, True)
 
         for size in (2, 4, 8):
             typ: CTypeTypedef = elf.types[f"uint{size * 8}_t"]

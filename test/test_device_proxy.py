@@ -13,7 +13,8 @@ class TestDeviceProxyGcc(unittest.TestCase):
         elf = compile(
             """
             #include <stdint.h>
-            uint8_t _;
+            uint8_t a;
+            int8_t b;
             """,
             cmdline=self.compiler_cmdline,
         )
@@ -30,6 +31,10 @@ class TestDeviceProxyGcc(unittest.TestCase):
         var = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("uint8_t *"), 0)
         var[0] = 0xFF
         self.assertEqual(var[0], 0xFF)
+
+        var = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("int8_t *"), 0)
+        var[0] = -1
+        self.assertEqual(var[0], -1)
 
     def test_proxy_struct(self):
         elf = compile(

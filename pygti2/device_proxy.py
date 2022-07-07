@@ -85,12 +85,17 @@ class VarProxy:
     def get_value(self):
         content = self.to_bytes()
         if self.is_primitive:
-            return int.from_bytes(content, self.backend.endian)
+            value = int.from_bytes(content, self.backend.endian)
+            if getattr(self.type, "signed", False) and value >> (8 * self.type.size - 1) != 0:
+                return int.from_bytes(self.type.size * b"\xff", self.backend.endian) - value - 1
+            return value
         return content
 
     def set_value(self, data: Union[int, "VarProxy"]):
         if isinstance(data, VarProxy) and self.type.kind == "pointer":
             data = data.address
+        elif isinstance(data, int) and data < 0:
+            data = int.from_bytes(self.type.size * b"\xff", self.backend.endian) + data + 1
         self.com.memory_write(
             self.address,
             data.to_bytes(self.type.size, self.backend.endian),
