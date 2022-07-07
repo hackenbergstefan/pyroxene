@@ -32,10 +32,10 @@ flowchart LR
     subgraph Host
         direction TB
         Testcode --> device_proxy
-        elfproxy --> device_proxy
+        elfbackend --> device_proxy
         device_proxy --> device_commands
         B(Elffile) --> C(pyelftoos)
-        C <--> elfproxy
+        C <--> elfbackend
     end
     device_commands <--> gti2
 ```
@@ -66,8 +66,8 @@ PyGTI makes this possible!
 - `lib` is a [pygti2.device_proxy.LibProxy](./pygti2/device_proxy) object.
 - `LibProxy` "knows" everything about the library by examining the elf-binary.
   So it is able to resolve the address of the exported function `addition`.
-  (`lib.addition` is an object of type `pygti2.device_proxy.ElfFuncProxy`)
-- Calling that function instructs the `ElfFuncProxy` to convert all arguments to a list of integers (see #Scope).
+  (`lib.addition` is an object of type `pygti2.device_proxy.FuncProxy`)
+- Calling that function instructs the `FuncProxy` to convert all arguments to a list of integers (see #Scope).
 - These list is marshaled in `device_commands` and sent to the (embedded) target device.
 - The answer get's un-marshaled and returned to the caller.
 
