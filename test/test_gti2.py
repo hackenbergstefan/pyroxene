@@ -148,4 +148,4 @@ class TestPyGti2(unittest.TestCase):
             const uint32_t X = 42;
             """,
         ) as lib:
-            self.assertEqual(lib.X[0], 42)
+            self.assertEqual(lib.X, 42)

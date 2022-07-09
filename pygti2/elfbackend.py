@@ -520,7 +520,7 @@ class ElfBackend:
             return self.types[decl]
         match = re.match(
             r"^(?P<base_pointer>[\w ]+\w(?: ?\*)*) ?\*$|"
-            r"^(?P<base_array>[\w ]+\w) ?\[(?P<array_length>\d+)\]$",
+            r"^(?P<base_array>[\w ]+\w) ?\[(?P<array_length>\d+)?\]$",
             decl,
         )
         if not match:
@@ -534,7 +534,7 @@ class ElfBackend:
             type = CTypeArray(
                 backend=self,
                 base=base,
-                length=int(match.group("array_length"), 0),
+                length=int(match.group("array_length"), 0) if match.group("array_length") else -1,
             )
         else:
             raise TypeError(f'Cannot create type from "{decl}".')

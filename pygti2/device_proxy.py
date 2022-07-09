@@ -2,7 +2,7 @@ from typing import List, Union
 from pygti2.companion_generator import GTI2_COMPANION_PREFIX
 from pygti2.device_commands import Communicator
 
-from pygti2.elfbackend import CType, ElfBackend
+from pygti2.elfbackend import CType, CTypeArray, ElfBackend
 
 
 def junks(thelist, junksize):
@@ -188,8 +188,11 @@ class FuncProxy:
                     packed_args.append(arg.get_value())
                 else:
                     packed_args.append(arg.address)
+            elif isinstance(arg, bytes):
+                var = self.lib.new("uint8_t []", arg)
+                packed_args.append(var.address)
             else:
-                ValueError(f"Cannot marshal {arg}")
+                raise ValueError(f"Cannot marshal {arg}")
         return packed_args
 
     def unmarshal_returntype(self, result: int) -> Union[int, VarProxy]:
@@ -240,13 +243,16 @@ class LibProxy:
             else:
                 type = type.type
                 length = -1
-            return VarProxy.new2(
+            var = VarProxy.new2(
                 self.backend,
                 self.com,
                 type,
                 address,
                 length,
             )
+            if var.cffi_compatibility_mode and var.length == -1 and var.type.kind == "int":
+                return var[0]
+            return var
         if type.kind == "function":
             return FuncProxy(
                 self,
@@ -257,14 +263,21 @@ class LibProxy:
             )
         raise TypeError(f"Neither variable or function: {type}")
 
-    def _new(self, type: Union[CType, str], address: int, *args):
+    def _new(self, type: Union[CType, str], address: int, *args, defer_set=False):
         length = -1
         if isinstance(type, str):
             type = self.backend.type_from_string(type)
             if type.kind == "array":
-                length = type.length
+                if type.length > 0:
+                    length = type.length
+                elif len(args) == 1 and isinstance(args[0], (list, bytes)):
+                    length = len(args[0])
+                    type = CTypeArray(type.backend, type.base, length)
+                else:
+                    raise ValueError(f"Cannot create {type}")
         var = VarProxy.new(self.backend, self.com, type, address, length)
-        self._set(var, *args)
+        if not defer_set:
+            self._set(var, *args)
         return var
 
     def _set(self, var: VarProxy, *args):
@@ -279,7 +292,7 @@ class LibProxy:
             var[0] = args
 
     def new(self, type: Union[CType, str], *args):
-        var = self._new(type, 0)
+        var = self._new(type, 0, *args, defer_set=True)
         self.memory_manager.malloc(var)
         self._set(var, *args)
 

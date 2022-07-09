@@ -79,7 +79,7 @@ class TestCompanionGenerator(unittest.TestCase):
             """
         src += "\n" + CompanionGenerator().parse_and_generate_companion_source(src)
         with compile(src) as lib:
-            self.assertEqual(lib.MACRO_1[0], 42)
+            self.assertEqual(lib.MACRO_1, 42)
             self.assertEqual(lib.MACRO_2(20, 21), 42)
 
     def test_string_defines(self):

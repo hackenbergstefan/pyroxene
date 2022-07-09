@@ -1,14 +1,25 @@
-import unittest
 import cffi
+import glob
+import hashlib
+import importlib
+import os
+import unittest
 
 from pygti2.memory_management import SimpleMemoryManager
 from .test_gti2 import compile
 
 
-def cdef(src):
+def cdef(cdef, src=""):
     ffi = cffi.FFI()
-    ffi.cdef(src)
-    return ffi
+    ffi.cdef(cdef, override=True)
+    modulename = "_test_cffi_compatibility_" + hashlib.sha256((cdef + src).encode()).hexdigest()
+    ffi.set_source(modulename, cdef + src)
+    ffi.compile()
+
+    mod = importlib.import_module(modulename)
+    for f in glob.glob(f"{modulename}*"):
+        os.remove(f)
+    return mod.ffi, mod.lib
 
 
 class TestCffiCompatibility(unittest.TestCase):
@@ -22,7 +33,7 @@ class TestCffiCompatibility(unittest.TestCase):
             a_t a;
             unsigned char heap[1024];
         """
-        ffi = cdef(inc)
+        ffi, _ = cdef(inc)
         with compile(inc + src) as lib:
             lib.memory_manager = SimpleMemoryManager(lib, "heap")
             var_pygti = lib.new("a_t *")
@@ -44,7 +55,7 @@ class TestCffiCompatibility(unittest.TestCase):
             a_t a;
             unsigned char heap[1024];
         """
-        ffi = cdef(inc)
+        ffi, _ = cdef(inc)
         with compile(inc + src) as lib:
             lib.memory_manager = SimpleMemoryManager(lib, "heap")
             var_pygti = lib.new("a_t [10]")
@@ -73,7 +84,7 @@ class TestCffiCompatibility(unittest.TestCase):
             a_t a;
             unsigned char heap[1024];
         """
-        ffi = cdef(inc)
+        ffi, _ = cdef(inc)
         with compile(inc + src) as lib:
             lib.memory_manager = SimpleMemoryManager(lib, "heap")
             var_pygti = lib.new("int *", 1)
@@ -103,6 +114,11 @@ class TestCffiCompatibility(unittest.TestCase):
             self.assertEqual([v.a for v in var_cffi], [1, 2])
             self.assertEqual([v.a for v in var_pygti], [1, 2])
 
+            var_pygti = lib.new("unsigned char []", b"abc")
+            var_cffi = ffi.new("unsigned char []", b"abc")
+            self.assertEqual(bytes(var_pygti[0:3]), b"abc")
+            self.assertEqual(bytes(var_cffi[0:3]), b"abc")
+
     def test_stdlib(self):
         inc = """
             typedef struct {
@@ -113,7 +129,7 @@ class TestCffiCompatibility(unittest.TestCase):
             a_t a;
             unsigned char heap[1024];
         """
-        ffi = cdef(inc)
+        ffi, _ = cdef(inc)
         with compile(inc + src) as lib:
             lib.memory_manager = SimpleMemoryManager(lib, "heap")
             var_pygti = lib.new("int [10]", 10 * [1])
@@ -133,3 +149,38 @@ class TestCffiCompatibility(unittest.TestCase):
 
             self.assertEqual(list(var2_pygti), 10 * [2])
             self.assertEqual(list(var2_cffi), 10 * [2])
+
+    def test_predefined(self):
+        inc = """
+            typedef struct {
+                int a;
+            } a_t;
+            const int A = 42;
+            const a_t B = {42};
+            """
+        _, ffilib = cdef(inc)
+        with compile(inc) as lib:
+            lib.memory_manager = SimpleMemoryManager(lib)
+            self.assertEqual(lib.A, 42)
+            self.assertEqual(ffilib.A, 42)
+            self.assertEqual(lib.B.a, 42)
+            self.assertEqual(ffilib.B.a, 42)
+
+    def test_functioncalls(self):
+        inc = """
+            typedef unsigned int uint;
+            uint func1(unsigned char *arr);
+            uint func2(char *arr);
+            """
+        src = """
+            uint func1(unsigned char *arr) { return arr[0]; }
+            uint func2(char *arr) { return arr[0] + arr[1]; }
+            """
+        _, ffilib = cdef(inc, src)
+        with compile(inc + src) as lib:
+            lib.memory_manager = SimpleMemoryManager(lib)
+            self.assertEqual(ffilib.func1(b"abc"), ord("a"))
+            self.assertEqual(ffilib.func2(b"abc"), ord("a") + ord("b"))
+
+            self.assertEqual(lib.func1(b"abc"), ord("a"))
+            self.assertEqual(lib.func2(b"abc"), ord("a") + ord("b"))
