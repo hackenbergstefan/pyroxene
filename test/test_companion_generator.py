@@ -76,11 +76,15 @@ class TestCompanionGenerator(unittest.TestCase):
             #include <stdint.h>
             #define MACRO_1 42
             #define MACRO_2(a, b) ((uint32_t)(a) + (b) + 1)
+            #define MACRO_3 (41 == 41)
+            #define MACRO_4() (41 == 41)
             """
         src += "\n" + CompanionGenerator().parse_and_generate_companion_source(src)
         with compile(src) as lib:
             self.assertEqual(lib.MACRO_1, 42)
             self.assertEqual(lib.MACRO_2(20, 21), 42)
+            self.assertEqual(lib.MACRO_3, 1)
+            self.assertEqual(lib.MACRO_4(), 1)
 
     def test_string_defines(self):
         src = """

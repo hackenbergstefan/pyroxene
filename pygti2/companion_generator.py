@@ -1,13 +1,15 @@
 from io import StringIO
-import subprocess
+import logging
 import os
 import re
+import subprocess
 
+from pcpp.preprocessor import Preprocessor
 import pycparser
 import pycparser.c_ast
 import pycparser.c_generator
 
-from pcpp.preprocessor import Preprocessor
+logger = logging.getLogger(__name__)
 
 
 class NullIO:
@@ -38,10 +40,12 @@ class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
         # Read parameters
         params = ",".join(p.name for p in n.decl.type.args.params if p.name is not None)
         # Create function definition
+        decl = self.default_generator.visit_FuncDecl(n.decl.type)
+        logger.debug(f"InlineFunctionGenerator: Generate {decl}")
         return " ".join(
             (
                 GTI2_COMPANION_FUNC_DECL_FLAGS,
-                self.default_generator.visit_FuncDecl(n.decl.type),
+                decl,
                 f"{{ return {n.decl.name}({params}); }}\n",
             )
         )
@@ -54,10 +58,12 @@ class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
         if returntype == "void":
             return ""
         param_decl = f"{returntype} *_" + ("," + param_decl if param_decl != "void" else "")
+        decl = f"void {GTI2_COMPANION_PREFIX_PTR}{n.decl.name}({param_decl})"
+        logger.debug(f"InlineFunctionGenerator: Generate {decl}")
         return " ".join(
             (
                 GTI2_COMPANION_FUNC_DECL_FLAGS,
-                f"void {GTI2_COMPANION_PREFIX_PTR}{n.decl.name}({param_decl})",
+                decl,
                 f"{{*_ = {n.decl.name}({params}); }}\n",
             )
         )
@@ -104,7 +110,7 @@ class MacroGenerator:
 
     def __init__(self, macro, preprocessor: Preprocessor):
         self.macro = macro
-        self.has_args = self.macro.arglist is not None and len(self.macro.arglist) > 0
+        self.has_args = self.macro.arglist is not None
         self.is_empty = len(self.macro.value) == 0
         self.preprocessor = preprocessor
         if not self.is_empty:
@@ -119,6 +125,7 @@ class MacroGenerator:
             else:
                 return f"const unsigned long {name}"
 
+        logger.debug(f"MacroGenerator: Generate {self.macro.name}")
         return (
             f"{GTI2_COMPANION_CONST_DECL_FLAGS} "
             f"{macrotype(GTI2_COMPANION_PREFIX+self.macro.name)} = {self.macro.name};\n"
@@ -126,6 +133,7 @@ class MacroGenerator:
 
     def _generate_code_function_with_args(self):
         args = ",".join(f"unsigned long {a}" for a in self.macro.arglist)
+        logger.debug(f"MacroGenerator: Generate {self.macro.name}({args})")
         return (
             f"{GTI2_COMPANION_FUNC_DECL_FLAGS} unsigned long "
             f"{GTI2_COMPANION_PREFIX}{self.macro.name}({args}) "
