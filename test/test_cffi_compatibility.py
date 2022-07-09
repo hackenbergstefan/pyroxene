@@ -171,16 +171,28 @@ class TestCffiCompatibility(unittest.TestCase):
             typedef unsigned int uint;
             uint func1(unsigned char *arr);
             uint func2(char *arr);
+            void func3(uint *x);
+            uint func4(uint x);
             """
         src = """
             uint func1(unsigned char *arr) { return arr[0]; }
             uint func2(char *arr) { return arr[0] + arr[1]; }
+            void func3(uint *x) { *x = 42; }
+            uint func4(uint x) { return x + 1; }
             """
-        _, ffilib = cdef(inc, src)
+        ffi, ffilib = cdef(inc, src)
         with compile(inc + src) as lib:
             lib.memory_manager = SimpleMemoryManager(lib)
             self.assertEqual(ffilib.func1(b"abc"), ord("a"))
             self.assertEqual(ffilib.func2(b"abc"), ord("a") + ord("b"))
+            var = ffi.new("uint *")
+            ffilib.func3(var)
+            self.assertEqual(var[0], 42)
+            self.assertEqual(ffilib.func4(var[0]), 43)
 
             self.assertEqual(lib.func1(b"abc"), ord("a"))
             self.assertEqual(lib.func2(b"abc"), ord("a") + ord("b"))
+            var = lib.new("uint *")
+            lib.func3(var)
+            self.assertEqual(var[0], 42)
+            self.assertEqual(lib.func4(var[0]), 43)

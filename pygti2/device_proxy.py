@@ -184,10 +184,7 @@ class FuncProxy:
             if isinstance(arg, int):
                 packed_args.append(arg)
             elif isinstance(arg, VarProxy):
-                if arg.type.kind == "int":
-                    packed_args.append(arg.get_value())
-                else:
-                    packed_args.append(arg.address)
+                packed_args.append(arg.address)
             elif isinstance(arg, bytes):
                 var = self.lib.new("uint8_t []", arg)
                 packed_args.append(var.address)
