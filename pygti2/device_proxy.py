@@ -195,7 +195,7 @@ class FuncProxy:
     def unmarshal_returntype(self, result: int) -> Union[int, VarProxy]:
         rettype = self.type.return_type
         if rettype.kind == "int":
-            if rettype.signed == True:
+            if rettype.signed:
                 return uint2int(result, rettype.size)
             else:
                 return result
@@ -211,8 +211,9 @@ class FuncProxy:
                 self.backend,
                 self.com,
                 self.type.return_type,
-                self.lib.gti2_memory.address,  # FIXME: Use self.lib.memory_manager
+                0,
             )
+            self.lib.memory_manager.malloc(var)
             var.set_value(result)
             return var
 

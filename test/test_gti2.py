@@ -1,13 +1,14 @@
 from contextlib import contextmanager
+from tempfile import TemporaryDirectory
+import os
 import signal
 import subprocess
-import os
-from tempfile import TemporaryDirectory
 import unittest
+
 from pygti2.device_commands import Gti2SocketCommunicator
 from pygti2.device_proxy import LibProxy
-
 from pygti2.elfbackend import ElfBackend
+from pygti2.memory_management import SimpleMemoryManager
 
 
 @contextmanager
@@ -130,6 +131,7 @@ class TestPyGti2(unittest.TestCase):
             a_t func5(uint32_t a, uint32_t b) { a_t x = { a, b }; return x; }
             """,
         ) as lib:
+            lib.memory_manager = SimpleMemoryManager(lib)
             self.assertEqual(lib.func1(), -42)
             self.assertEqual(lib.func2(41), 42)
             self.assertEqual(lib.func3(21, 20), 42)

@@ -5,7 +5,7 @@ from pygti2.device_proxy import LibProxy, VarProxy
 
 
 class SimpleMemoryManager:
-    def __init__(self, lib: LibProxy, name_of_heap: str):
+    def __init__(self, lib: LibProxy, name_of_heap: str = "gti2_memory"):
         self.lib = lib
         var = getattr(lib, name_of_heap)
         self.base_addr = var.address
