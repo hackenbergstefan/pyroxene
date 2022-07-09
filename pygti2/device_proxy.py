@@ -10,6 +10,13 @@ def junks(thelist, junksize):
         yield thelist[i : i + junksize]
 
 
+def uint2int(value, size):
+    minus_one = int.from_bytes(size * b"\xff", "big")
+    if value >> (8 * size - 1) != 0:
+        return value - minus_one - 1
+    return value
+
+
 class VarProxy:
     """VarProxy behaves like a pointer to its type."""
 
@@ -186,8 +193,12 @@ class FuncProxy:
         return packed_args
 
     def unmarshal_returntype(self, result: int) -> Union[int, VarProxy]:
-        if self.type.return_type.kind == "int":
-            return result
+        rettype = self.type.return_type
+        if rettype.kind == "int":
+            if rettype.signed == True:
+                return uint2int(result, rettype.size)
+            else:
+                return result
         try:
             return VarProxy.new(
                 self.backend,

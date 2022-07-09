@@ -118,7 +118,7 @@ class TestPyGti2(unittest.TestCase):
         with compile(
             """
             #include <stdint.h>
-            int func1(void) { return 42; }
+            int func1(void) { return -42; }
             int func2(int a) { return 1 + a; }
             int func3(int a, int b) { return 1 + a + b; }
 
@@ -130,7 +130,7 @@ class TestPyGti2(unittest.TestCase):
             a_t func5(uint32_t a, uint32_t b) { a_t x = { a, b }; return x; }
             """,
         ) as lib:
-            self.assertEqual(lib.func1(), 42)
+            self.assertEqual(lib.func1(), -42)
             self.assertEqual(lib.func2(41), 42)
             self.assertEqual(lib.func3(21, 20), 42)
             self.assertEqual(lib.func4(1), 0xFFFFFFFFFFFFFFFE)
