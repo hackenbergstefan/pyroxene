@@ -14,6 +14,7 @@ class VarProxy:
     """VarProxy behaves like a pointer to its type."""
 
     __slots__ = ("backend", "com", "type", "address", "length")
+    cffi_compatibility_mode = True
 
     @staticmethod
     def new(backend: ElfBackend, com: Communicator, type: CType, address: int, length: int = -1):
@@ -59,6 +60,8 @@ class VarProxy:
                 self.type.base,
                 int.from_bytes(content, self.backend.endian),
             )
+        elif self.cffi_compatibility_mode:
+            return newvarproxy
         else:
             raise ValueError("Cannot de-reference.")
 
@@ -66,6 +69,8 @@ class VarProxy:
         if isinstance(index, slice):
             return [self._getitem_single(i) for i in range(index.start, index.stop)]
         else:
+            if self.length != -1 and index >= self.length:
+                raise IndexError()
             return self._getitem_single(index)
 
     def _setitem_single(self, index, data):
@@ -96,6 +101,10 @@ class VarProxy:
             data = data.address
         elif isinstance(data, int) and data < 0:
             data = int.from_bytes(self.type.size * b"\xff", self.backend.endian) + data + 1
+        elif isinstance(data, (list, tuple)):
+            for member, value in zip(getattr(self.type, "members", {}), data):
+                setattr(self, member, value)
+            return
         self.com.memory_write(
             self.address,
             data.to_bytes(self.type.size, self.backend.endian),
@@ -242,11 +251,26 @@ class LibProxy:
             type = self.backend.type_from_string(type)
             if type.kind == "array":
                 length = type.length
-        return VarProxy.new(self.backend, self.com, type, address, length)
+        var = VarProxy.new(self.backend, self.com, type, address, length)
+        self._set(var, *args)
+        return var
 
-    def new(self, type: Union[CType, str]):
+    def _set(self, var: VarProxy, *args):
+        if not args:
+            return
+        if len(args) == 1:
+            args = args[0]
+        if var.length != -1:
+            for i, a in enumerate(args):
+                var[i] = a
+        else:
+            var[0] = args
+
+    def new(self, type: Union[CType, str], *args):
         var = self._new(type, 0)
         self.memory_manager.malloc(var)
+        self._set(var, *args)
+
         return var
 
     def memset(self, addr: Union[VarProxy, int], value: int, length: int):
@@ -254,9 +278,16 @@ class LibProxy:
             addr = addr.address
         self.com.memory_write(addr, length * bytes([value]))
 
-    def memcpy(self, destination: int, source: int, length: int):
+    def memmove(self, destination: Union[VarProxy, int], source: Union[VarProxy, int], length: int):
+        if isinstance(destination, VarProxy):
+            destination = destination.address
+        if isinstance(source, VarProxy):
+            source = source.address
         content = self.com.memory_read(source, length)
         self.com.memory_write(destination, content)
 
     def sizeof(self, var: VarProxy):
         return var.length * var.type.size if var.length != -1 else var.type.size
+
+    def addressof(self, var: VarProxy):
+        return var.address

@@ -69,9 +69,9 @@ class TestDeviceProxyGcc(unittest.TestCase):
         self.assertEqual(var.type, elf.type_from_string("unsigned int"))
         self.assertEqual(var.address, 0)
         self.assertEqual(var.length, 1)
-        self.assertEqual(var[1], 0)
-        var[1] = 5
-        self.assertEqual(var[1], 5)
+        self.assertEqual(var[0], 0)
+        var[0] = 5
+        self.assertEqual(var[0], 5)
 
     def test_proxy_array_2(self):
         elf = compile(
