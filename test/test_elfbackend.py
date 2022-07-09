@@ -4,7 +4,6 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from pygti2.elfbackend import (
-    CType,
     CTypeArray,
     CTypeBaseType,
     CTypePointer,
@@ -53,10 +52,6 @@ def compile(source: str, source2: str = "", cmdline="gcc -c -g {infile} -o {outf
 
 class TestCTypeGcc(unittest.TestCase):
     compiler_cmdline = "gcc -c -g3 {infile} -o {outfile}"
-
-    def test_ctype_not_instanceable(self):
-        with self.assertRaises(TypeError):
-            CType._new(None, None)
 
     def test_base_ints(self):
         elf = compile(
@@ -197,6 +192,7 @@ class TestCTypeGcc(unittest.TestCase):
         typ: CTypeTypedef = elf.types["intarr"]
         self.assertEqual(typ.kind, "array")
         self.assertEqual(typ.size, 8)
+        self.assertEqual(typ.typename, "intarr")
 
     def test_decl_pointer(self):
         elf = compile(
