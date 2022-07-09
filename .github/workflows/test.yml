@@ -19,4 +19,4 @@ jobs:
         pip install -r requirements.txt
     - name: Test
       run: |
-        python runtests.py -v test.test_elfbackend test.test_device_proxy test.test_gti2 test.test_companion_generator
+        python runtests.py -v test/*.py
