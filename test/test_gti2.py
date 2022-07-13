@@ -56,7 +56,7 @@ class TestPyGti2(unittest.TestCase):
             #include <stdint.h>
             """,
         ) as lib:
-            self.assertEqual(lib.sizeof(lib.gti2_memory), 1024)
+            self.assertEqual(lib.sizeof(lib.gti2_memory), 4096)
 
             var = lib._new("uint8_t *", lib.gti2_memory.address)
             self.assertEqual(lib.sizeof(var), 1)

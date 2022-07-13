@@ -4,7 +4,7 @@
 #include "gti2.h"
 #include "swap.h"
 
-uint8_t gti2_memory[1024];
+uint8_t gti2_memory[4 * 1024];
 
 typedef union
 {
