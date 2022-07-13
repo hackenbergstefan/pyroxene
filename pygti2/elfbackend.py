@@ -438,6 +438,7 @@ class ElfBackend:
         self.enums = {}
         self.types["void"] = CTypeBaseType(self, "void", 0)
         self._create(file, readelf_binary, compilation_unit_filter, tolerant)
+        self.types["NULL"] = CTypeVariable(self, "NULL", 0, self.type_from_string("void *"), 0)
 
     def type_from_die(self, die: DIE):
         if die.tag == "DW_TAG_base_type":
