@@ -9,6 +9,7 @@ from pygti2.device_commands import Gti2SocketCommunicator
 from pygti2.device_proxy import LibProxy
 from pygti2.elfbackend import ElfBackend
 from pygti2.memory_management import SimpleMemoryManager
+from pygti2.companion_generator import CompanionGenerator
 
 
 @contextmanager
@@ -116,8 +117,7 @@ class TestPyGti2(unittest.TestCase):
             self.assertEqual(var3.a, 0xFF)
 
     def test_function_call(self):
-        with compile(
-            """
+        src = """
             #include <stdint.h>
             int func1(void) { return -42; }
             int func2(int a) { return 1 + a; }
@@ -129,8 +129,17 @@ class TestPyGti2(unittest.TestCase):
                 uint32_t b;
             } a_t;
             a_t func5(uint32_t a, uint32_t b) { a_t x = { a, b }; return x; }
-            """,
-        ) as lib:
+
+            typedef struct {
+                uint32_t a;
+                uint32_t b;
+                uint32_t c;
+            } b_t;
+            b_t func6(uint32_t a, uint32_t b, uint32_t c) { b_t x = { a, b, c }; return x; }
+            inline b_t func7(uint32_t a, uint32_t b, uint32_t c) { b_t x = { a, b, c }; return x; }
+        """
+        src += CompanionGenerator().parse_and_generate_companion_source(src)
+        with compile(src) as lib:
             lib.memory_manager = SimpleMemoryManager(lib)
             self.assertEqual(lib.func1(), -42)
             self.assertEqual(lib.func2(41), 42)
@@ -140,6 +149,15 @@ class TestPyGti2(unittest.TestCase):
             result = lib.func5(1, 2)
             self.assertEqual(result.a, 1)
             self.assertEqual(result.b, 2)
+            # FIXME: Implement generation of companion functions for non-inlines
+            # result = lib.func6(1, 2, 3)
+            # self.assertEqual(result.a, 1)
+            # self.assertEqual(result.b, 2)
+            # self.assertEqual(result.c, 3)
+            result = lib.func7(4, 5, 6)
+            self.assertEqual(result.a, 4)
+            self.assertEqual(result.b, 5)
+            self.assertEqual(result.c, 6)
 
     def test_consts(self):
         with compile(
@@ -149,3 +167,33 @@ class TestPyGti2(unittest.TestCase):
             """,
         ) as lib:
             self.assertEqual(lib.X, 42)
+
+    def test_array_allocation(self):
+        with compile("") as lib:
+            lib.memory_manager = SimpleMemoryManager(lib)
+            var = lib.new("uint8_t[]", 10)
+            self.assertEqual(var.length, 10)
+            self.assertEqual(len(var), 10)
+            self.assertEqual(var[0:10], 10 * [0])
+
+            var = lib.new("uint8_t[]", bytes(range(10)))
+            self.assertEqual(var.length, 10)
+            self.assertEqual(len(var), 10)
+            self.assertEqual(bytes(var[0:10]), bytes(range(10)))
+
+    def test_allocation_with_parameters(self):
+        with compile(
+            """
+            #include <stdint.h>
+            uint32_t init32(void) { return 42; }
+            """,
+        ) as lib:
+            lib.memory_manager = SimpleMemoryManager(lib)
+            var = lib.new("uint32_t *", 1)
+            self.assertEqual(var[0], 1)
+
+            var2 = lib.new("uint32_t *", var)
+            self.assertEqual(var2[0], 1)
+
+            var = lib.new("uint32_t *", lib.init32())
+            self.assertEqual(var[0], 42)

@@ -1,8 +1,8 @@
 from typing import List, Union
-from pygti2.companion_generator import GTI2_COMPANION_PREFIX
+from pygti2.companion_generator import GTI2_COMPANION_PREFIX, GTI2_COMPANION_PREFIX_PTR
 from pygti2.device_commands import Communicator
 
-from pygti2.elfbackend import CType, CTypeArray, ElfBackend
+from pygti2.elfbackend import CType, CTypeArray, CTypeFunction, ElfBackend
 
 
 def junks(thelist, junksize):
@@ -124,6 +124,9 @@ class VarProxy:
     def is_primitive(self):
         return self.type.kind == "int"
 
+    def __len__(self):
+        return self.length
+
 
 class VarProxyStruct(VarProxy):
     def __getattr__(self, name):
@@ -165,10 +168,21 @@ class FuncProxy:
         self.lib = lib
         self.backend = backend
         self.com = com
-        self.type = type
+        self.type: CTypeFunction = type
         self.address = address
 
     def __call__(self, *args):
+        # If return value is too large assume different call structure:
+        # Instead: bigstruct = func(args)
+        # Use: void _gti2_ptr_func(bigstruct *, args)
+        if self.type.typename.startswith(GTI2_COMPANION_PREFIX_PTR):
+            returnvalue = self.lib.new(self.type.arguments[0])
+            self.com.call(
+                self.address,
+                0,
+                self.marshal_args(returnvalue, *args),
+            )
+            return returnvalue
         result = self.com.call(
             self.address,
             self.type.return_type.size if self.type.return_type else 0,
@@ -186,7 +200,8 @@ class FuncProxy:
             elif isinstance(arg, VarProxy):
                 packed_args.append(arg.address)
             elif isinstance(arg, bytes):
-                var = self.lib.new("uint8_t []", arg)
+                var = self.lib.new("uint8_t[]", 0)
+                var[0 : len(arg)] = arg
                 packed_args.append(var.address)
             else:
                 raise ValueError(f"Cannot marshal {arg}")
@@ -251,6 +266,9 @@ class LibProxy:
                 return var[0]
             return var
         if type.kind == "function":
+            # Redirect to "_gti2_ptr" variant if return argument is too big
+            if getattr(type.return_type, "size", 0) > 8:
+                type = self.backend.types[GTI2_COMPANION_PREFIX_PTR + name]
             return FuncProxy(
                 self,
                 self.backend,
@@ -270,6 +288,9 @@ class LibProxy:
                 elif len(args) == 1 and isinstance(args[0], (list, bytes)):
                     length = len(args[0])
                     type = CTypeArray(type.backend, type.base, length)
+                elif len(args) == 1 and isinstance(args[0], int):
+                    length = args[0]
+                    type = CTypeArray(type.backend, type.base, length)
                 else:
                     raise ValueError(f"Cannot create {type}")
         var = VarProxy.new(self.backend, self.com, type, address, length)
@@ -283,14 +304,16 @@ class LibProxy:
         if len(args) == 1:
             args = args[0]
         if var.length != -1:
-            for i, a in enumerate(args):
-                var[i] = a
+            if isinstance(args, (list, tuple, bytes)):
+                for i, a in enumerate(args):
+                    var[i] = a
         else:
             var[0] = args
 
     def new(self, type: Union[CType, str], *args):
         var = self._new(type, 0, *args, defer_set=True)
         self.memory_manager.malloc(var)
+        self.memset(var.address, 0, self.sizeof(var))
         self._set(var, *args)
 
         return var

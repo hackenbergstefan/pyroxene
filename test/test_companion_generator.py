@@ -64,12 +64,6 @@ class TestCompanionGenerator(unittest.TestCase):
             self.assertIn("_gti2_func2", lib.backend.types)
             self.assertIn("_gti2_ptr_func2", lib.backend.types)
             self.assertIn("_gti2_func3", lib.backend.types)
-            var = lib._new("a_t *", address=lib.gti2_memory.address)
-            lib._gti2_ptr_func1(var)
-            self.assertEqual(var.x, 42)
-            var = lib._new("char **", address=lib.gti2_memory.address)
-            lib._gti2_ptr_func4(var)
-            self.assertEqual(bytes(var[0][0:3]), b"abc")
 
     def test_numeric_defines(self):
         src = """
