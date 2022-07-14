@@ -196,7 +196,7 @@ class VarProxyStruct(VarProxy):
 class FuncProxy:
     """FuncProxy behaves like a pointer to its type."""
 
-    __slots__ = ("lib", "backend", "com", "type", "address")
+    __slots__ = ("lib", "backend", "com", "type", "address", "_allocated_for_call")
 
     def __init__(self, lib: "LibProxy", backend: ElfBackend, com: Communicator, type: CType, address: int):
         self.lib = lib
@@ -204,6 +204,7 @@ class FuncProxy:
         self.com = com
         self.type: CTypeFunction = type
         self.address = address
+        self._allocated_for_call = []
 
     def __call__(self, *args):
         # If return value is too large assume different call structure:
@@ -222,6 +223,8 @@ class FuncProxy:
             self.type.return_type.size if self.type.return_type else 0,
             self.marshal_args(*args),
         )
+        for var in self._allocated_for_call:
+            self.lib.memory_manager.free(var)
         if self.type.return_type is not None:
             return self.unmarshal_returntype(result)
 
@@ -234,8 +237,9 @@ class FuncProxy:
             elif isinstance(arg, VarProxy):
                 packed_args.append(arg.address)
             elif isinstance(arg, bytes):
-                var = self.lib.new("uint8_t[]", 0)
+                var = self.lib.new("uint8_t[]", len(arg))
                 var[0 : len(arg)] = arg
+                self._allocated_for_call.append(var)
                 packed_args.append(var.address)
             else:
                 raise ValueError(f"Cannot marshal {arg}")
