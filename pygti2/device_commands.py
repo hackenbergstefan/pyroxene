@@ -39,7 +39,10 @@ class Gti2Communicactor(Communicator):
 
     def command(self, cmd, data, expected):
         self.write(struct.pack("!HH", cmd, len(data)) + data)
-        return self.read(expected)
+        response = self.read(2 + expected)
+        if response[:2] != b"OK":
+            raise Exception("Command did not respond sucessfully.")
+        return response[2:]
 
     def call(self, addr: int, numbytes_return: int, args: List[int]) -> int:
         if numbytes_return > 0:

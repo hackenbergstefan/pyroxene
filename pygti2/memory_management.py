@@ -1,7 +1,10 @@
+import logging
 import sys
 from typing import List
 
 from pygti2.device_proxy import LibProxy, VarProxy
+
+logger = logging.getLogger(__name__)
 
 
 class SimpleMemoryManager:
@@ -44,3 +47,8 @@ class SimpleMemoryManager:
         else:
             highest_used = highest_used[-1] - self.base_addr
         self.used = highest_used
+
+    def free(self, variable: VarProxy):
+        logger.debug(f"SimpleMemoryManager:free: {self.lib.sizeof(variable)} @ {variable.address:08x}")
+        self.allocated.remove(variable)
+        # self.autofree()
