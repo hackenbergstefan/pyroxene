@@ -95,7 +95,7 @@ class TestPyGti2(unittest.TestCase):
             a_t _;
             """,
         ) as lib:
-            var = lib._new("uint8_t *", lib.gti2_memory.address)
+            var = lib._new("uint8_t [10]", lib.gti2_memory.address)
             lib.memset(lib.gti2_memory, 0, lib.sizeof(lib.gti2_memory))
 
             # Write and read single value
@@ -164,9 +164,13 @@ class TestPyGti2(unittest.TestCase):
             """
             #include <stdint.h>
             const uint32_t X = 42;
+            uint32_t Y = 42;
             """,
         ) as lib:
             self.assertEqual(lib.X, 42)
+            self.assertEqual(lib.backend.types["X"].data, (42).to_bytes(4, lib.backend.endian))
+            self.assertEqual(lib.Y, 42)
+            self.assertIsNone(lib.backend.types["Y"].data)
 
     def test_array_allocation(self):
         with compile("") as lib:

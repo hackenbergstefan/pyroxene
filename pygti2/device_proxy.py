@@ -1,8 +1,8 @@
 from typing import List, Union
-from pygti2.companion_generator import GTI2_COMPANION_PREFIX, GTI2_COMPANION_PREFIX_PTR
-from pygti2.device_commands import Communicator
 
-from pygti2.elfbackend import CType, CTypeArray, CTypeFunction, ElfBackend
+from .companion_generator import GTI2_COMPANION_PREFIX, GTI2_COMPANION_PREFIX_PTR
+from .device_commands import Communicator
+from .elfbackend import CType, CTypeArray, CTypeFunction, CTypeVariable, ElfBackend
 
 
 def junks(thelist, junksize):
@@ -50,14 +50,15 @@ class VarProxy:
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} {self.type}[{self.length}] @ 0x{self.address or 0:08x}>"
 
-    def _getitem_single(self, index):
+    def _getitem_single(self, index, content=None):
         newvarproxy = self.new2(
             self.backend,
             self.com,
             self.type,
             self.address + index * self.type.size,
         )
-        content = newvarproxy.get_value()
+        if content is None:
+            content = newvarproxy.get_value()
         if newvarproxy.is_primitive:
             return content
         elif self.type.kind == "pointer":
@@ -74,6 +75,15 @@ class VarProxy:
 
     def __getitem__(self, index):
         if isinstance(index, slice):
+            if self.is_primitive:
+                # Speed up by reading memory at once
+                return self.new2(
+                    self.backend,
+                    self.com,
+                    self.type,
+                    self.address + index.start * self.type.size,
+                    length=index.stop - index.start,
+                ).get_value()
             return [self._getitem_single(i) for i in range(index.start, index.stop)]
         else:
             if self.length != -1 and index >= self.length:
@@ -90,6 +100,16 @@ class VarProxy:
 
     def __setitem__(self, index, data):
         if isinstance(index, slice):
+            if self.length == -1:
+                raise TypeError("Sliced access only possible on arrays.")
+            if self.is_primitive:
+                if index.stop - index.start != len(data):
+                    raise ValueError("Slice does not match length of data.")
+                # Speed up by writing memory at once
+                return self.com.memory_write(
+                    self.address + index.start * self.type.size,
+                    b"".join(d.to_bytes(self.type.size, self.backend.endian) for d in data),
+                )
             return [self._setitem_single(i, d) for i, d in zip(range(index.start, index.stop), data)]
         else:
             return self._setitem_single(index, data)
@@ -97,13 +117,18 @@ class VarProxy:
     def get_value(self):
         content = self.to_bytes()
         if self.is_primitive:
-            value = int.from_bytes(content, self.backend.endian)
-            if getattr(self.type, "signed", False) and value >> (8 * self.type.size - 1) != 0:
-                return int.from_bytes(self.type.size * b"\xff", self.backend.endian) - value - 1
-            return value
+            values = []
+            for part in junks(content, self.type.size):
+                value = int.from_bytes(part, self.backend.endian)
+                if getattr(self.type, "signed", False) and value >> (8 * self.type.size - 1) != 0:
+                    value = int.from_bytes(self.type.size * b"\xff", self.backend.endian) - value - 1
+                values.append(value)
+            if len(values) == 1:
+                return values[0]
+            return values
         return content
 
-    def set_value(self, data: Union[int, "VarProxy"]):
+    def set_value(self, data: Union[list, int, "VarProxy"]):
         if isinstance(data, VarProxy) and self.type.kind == "pointer":
             data = data.address
         elif isinstance(data, int) and data < 0:
@@ -118,7 +143,11 @@ class VarProxy:
         )
 
     def to_bytes(self, *args):
-        return self.com.memory_read(self.address, self.type.size)
+        if isinstance(self.type, CTypeVariable) and self.type.data is not None:
+            if self.address != self.type.address:
+                raise TypeError("Address mismatch.")
+            return self.type.data
+        return self.com.memory_read(self.address, self.type.size * (self.length if self.length > 0 else 1))
 
     @property
     def is_primitive(self):
@@ -126,6 +155,11 @@ class VarProxy:
 
     def __len__(self):
         return self.length
+
+    def __iter__(self):
+        if self.length < 1:
+            return None
+        yield from self.__getitem__(slice(0, self.length))
 
 
 class VarProxyStruct(VarProxy):

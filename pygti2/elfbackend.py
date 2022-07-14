@@ -6,6 +6,7 @@ from elftools.dwarf.dwarf_expr import DW_OP_opcode2name
 from elftools.dwarf.descriptions import _DESCR_DW_ATE
 from elftools.dwarf.die import DIE
 from elftools.elf.elffile import ELFFile
+from elftools.elf.constants import P_FLAGS
 
 logger = logging.getLogger(__name__)
 
@@ -352,6 +353,7 @@ class CTypeVariable(CType):
     @classmethod
     def fromdie(cls, backend: "ElfBackend", die: DIE) -> "CTypeVariable":
         location = None
+        data = None
         if "DW_AT_specification" in die.attributes:
             location = loc2addr(die)
             die = die.get_DIE_from_attribute("DW_AT_specification")
@@ -361,23 +363,28 @@ class CTypeVariable(CType):
         if typedie.tag == "DW_TAG_const_type":
             typedie = typedie.get_DIE_from_attribute("DW_AT_type")
         type = backend.type_from_die(typedie)
-        return CType.fromdie(CTypeVariable, backend, die, type=type, location=location)
+        if location is not None:
+            data = backend.read_memory(location, type.size)
+        return CType.fromdie(CTypeVariable, backend, die, type=type, location=location, data=data)
 
-    def __init__(self, backend, typename, size, type: CType, location: int = None):
+    def __init__(self, backend, typename, size, type: CType, location: int = None, data: bytes = None):
         super().__init__(backend, typename, size)
         self.kind = "variable"
         self.type = type
         self.address = location
         self.size = type.size
+        self.data = data
         logger.debug("New " + repr(self))
 
     def update(self, other: "CTypeVariable"):
         if self.address is None:
             self.address = other.address
             self.type = other.type
+            self.data = other.data
         if self.size == -1:
             self.size = other.size
             self.type = other.type
+            self.data = other.data
 
 
 class CTypeFunction(CType):
@@ -547,3 +554,14 @@ class ElfBackend:
         else:
             self.types[type.typename] = type
             return type
+
+    def read_memory(self, location: int, size: int):
+        for segment in self.elffile.iter_segments(type="PT_LOAD"):
+            if segment["p_vaddr"] is None:
+                continue
+            if segment["p_flags"] & P_FLAGS.PF_W != 0:
+                # Skip segments with writable data
+                continue
+            offset = location - segment["p_vaddr"]
+            if offset >= 0 and location + size <= segment["p_vaddr"] + segment["p_filesz"]:
+                return segment.data()[offset : offset + size]
