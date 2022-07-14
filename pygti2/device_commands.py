@@ -54,16 +54,18 @@ class Gti2Communicactor(Communicator):
         return self.unmarshal_long(result)
 
     def memory_read(self, addr: int, size: int) -> bytes:
-        logging.getLogger(__name__).debug(f"PyGti2Command.memory_read 0x{addr:08x}, {size}")
+        logging.getLogger(__name__).debug(f"PyGti2Command.memory_read 0x{addr:08x}, {size} -> ...")
         result = self.command(
             1,
             self.marshal_long(addr) + self.marshal_long(size),
             size,
         )
-        logging.getLogger(__name__).debug(f"PyGti2Command.memory_read 0x{addr:08x}, {size} -> {result.hex()}")
+        logging.getLogger(__name__).debug(f"PyGti2Command.memory_read ... -> {result.hex()}")
         return result
 
     def memory_write(self, addr: int, data: bytes) -> None:
+        if len(data) == 0:
+            return
         logging.getLogger(__name__).debug(f"PyGti2Command.memory_write 0x{addr:08x}, {data.hex()}")
         return self.command(2, self.marshal_long(addr) + data, 0)
 
@@ -87,7 +89,10 @@ class Gti2SerialCommunicator(Gti2Communicactor):
         self.ser.timeout = None
 
     def read(self, length):
-        return self.ser.read(length)
+        data = self.ser.read(length)
+        if len(data) != length:
+            raise TimeoutError("Device took too long to respond.")
+        return data
 
     def write(self, data):
         self.ser.write(data)
@@ -104,7 +109,10 @@ class Gti2SocketCommunicator(Gti2Communicactor):
             raise Exception("Something went wrong.")
 
     def read(self, length):
-        return self.sock.recv(length)
+        data = b""
+        while len(data) < length:
+            data += self.sock.recv(length - len(data))
+        return data
 
     def write(self, data):
         self.sock.sendall(data)
