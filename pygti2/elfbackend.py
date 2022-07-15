@@ -360,10 +360,12 @@ class CTypeVariable(CType):
         elif "DW_AT_location" in die.attributes:
             location = loc2addr(die)
         typedie = die.get_DIE_from_attribute("DW_AT_type")
+        isconst = False
         if typedie.tag == "DW_TAG_const_type":
+            isconst = True
             typedie = typedie.get_DIE_from_attribute("DW_AT_type")
         type = backend.type_from_die(typedie)
-        if location is not None:
+        if location is not None and isconst:
             data = backend.read_memory(location, type.size)
         return CType.fromdie(CTypeVariable, backend, die, type=type, location=location, data=data)
 
@@ -558,9 +560,6 @@ class ElfBackend:
     def read_memory(self, location: int, size: int):
         for segment in self.elffile.iter_segments(type="PT_LOAD"):
             if segment["p_vaddr"] is None:
-                continue
-            if segment["p_flags"] & P_FLAGS.PF_W != 0:
-                # Skip segments with writable data
                 continue
             offset = location - segment["p_vaddr"]
             if offset >= 0 and location + size <= segment["p_vaddr"] + segment["p_filesz"]:

@@ -20,32 +20,41 @@ def uint2int(value, size):
 class VarProxy:
     """VarProxy behaves like a pointer to its type."""
 
-    __slots__ = ("backend", "com", "type", "address", "length")
+    __slots__ = ("backend", "com", "type", "address", "length", "data")
     cffi_compatibility_mode = True
 
     @staticmethod
-    def new(backend: ElfBackend, com: Communicator, type: CType, address: int, length: int = -1):
+    def new(backend: ElfBackend, com: Communicator, type: CType, address: int, length: int = -1, data=None):
         if type.kind not in ("pointer", "array"):
             raise TypeError("Only pointer or arrays can be created.")
 
         if type.kind == "array":
             length = type.length
-        return VarProxy.new2(backend, com, type.base, address, length)
+        return VarProxy.new2(backend, com, type.base, address, length, data)
 
     @staticmethod
-    def new2(backend: ElfBackend, com: Communicator, type: CType, address: int, length: int = -1):
+    def new2(backend: ElfBackend, com: Communicator, type: CType, address: int, length: int = -1, data=None):
         if type.kind in ("struct", "typedef struct"):
             cls = VarProxyStruct
         else:
             cls = VarProxy
-        return cls(backend, com, type, address, length)
+        return cls(backend, com, type, address, length, data)
 
-    def __init__(self, backend: ElfBackend, com: Communicator, type: CType, address: int, length: int = -1):
+    def __init__(
+        self,
+        backend: ElfBackend,
+        com: Communicator,
+        type: CType,
+        address: int,
+        length: int = -1,
+        data=None,
+    ):
         self.backend = backend
         self.com = com
         self.type = type
         self.address = address
         self.length = length
+        self.data = data
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} {self.type}[{self.length}] @ 0x{self.address or 0:08x}>"
@@ -56,6 +65,7 @@ class VarProxy:
             self.com,
             self.type,
             self.address + index * self.type.size,
+            data=self.data[index * self.type.size :] if self.data is not None else None,
         )
         if content is None:
             content = newvarproxy.get_value()
@@ -83,6 +93,7 @@ class VarProxy:
                     self.type,
                     self.address + index.start * self.type.size,
                     length=index.stop - index.start,
+                    data=self.data[index.start * self.type.size :] if self.data is not None else None,
                 ).get_value()
             return [self._getitem_single(i) for i in range(index.start, index.stop)]
         else:
@@ -121,7 +132,7 @@ class VarProxy:
             for part in junks(content, self.type.size):
                 value = int.from_bytes(part, self.backend.endian)
                 if getattr(self.type, "signed", False) and value >> (8 * self.type.size - 1) != 0:
-                    value = int.from_bytes(self.type.size * b"\xff", self.backend.endian) - value - 1
+                    value = value - int.from_bytes(self.type.size * b"\xff", self.backend.endian) - 1
                 values.append(value)
             if len(values) == 1:
                 return values[0]
@@ -143,10 +154,8 @@ class VarProxy:
         )
 
     def to_bytes(self, *args):
-        if isinstance(self.type, CTypeVariable) and self.type.data is not None:
-            if self.address != self.type.address:
-                raise TypeError("Address mismatch.")
-            return self.type.data
+        if self.data is not None:
+            return self.data
         return self.com.memory_read(self.address, self.type.size * (self.length if self.length > 0 else 1))
 
     @property
@@ -159,6 +168,9 @@ class VarProxy:
     def __iter__(self):
         if self.length < 1:
             return None
+        if self.length == 1:
+            yield self[0]
+            return
         yield from self.__getitem__(slice(0, self.length))
 
 
@@ -286,6 +298,7 @@ class LibProxy:
             raise TypeError(f"Unknown type: {name}")
 
         if type.kind == "variable":
+            data = type.data
             address = type.address
             if type.type.kind == "array":
                 length = type.type.length
@@ -299,6 +312,7 @@ class LibProxy:
                 type,
                 address,
                 length,
+                data=data,
             )
             if var.cffi_compatibility_mode and var.length == -1 and var.type.kind == "int":
                 return var[0]
@@ -366,7 +380,7 @@ class LibProxy:
             destination = destination.address
         if isinstance(source, VarProxy):
             source = source.address
-        content = self.com.memory_read(source, length)
+        content = source if isinstance(source, bytes) else self.com.memory_read(source, length)
         self.com.memory_write(destination, content)
 
     def sizeof(self, var: VarProxy):
