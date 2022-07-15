@@ -6,7 +6,6 @@ from elftools.dwarf.dwarf_expr import DW_OP_opcode2name
 from elftools.dwarf.descriptions import _DESCR_DW_ATE
 from elftools.dwarf.die import DIE
 from elftools.elf.elffile import ELFFile
-from elftools.elf.constants import P_FLAGS
 
 logger = logging.getLogger(__name__)
 

@@ -123,7 +123,7 @@ class MacroGenerator:
             if any(tok.type == "CPP_STRING" for tok in self.preprocessor.expand_macros(self.macro.value)):
                 return f"const char {name}[]"
             else:
-                return f"const unsigned long {name}"
+                return f"const long long {name}"
 
         logger.debug(f"MacroGenerator: Generate {self.macro.name}")
         return (

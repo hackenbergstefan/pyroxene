@@ -2,7 +2,7 @@ from typing import List, Union
 
 from .companion_generator import GTI2_COMPANION_PREFIX, GTI2_COMPANION_PREFIX_PTR
 from .device_commands import Communicator
-from .elfbackend import CType, CTypeArray, CTypeFunction, CTypeVariable, ElfBackend
+from .elfbackend import CType, CTypeArray, CTypeFunction, ElfBackend
 
 
 def junks(thelist, junksize):

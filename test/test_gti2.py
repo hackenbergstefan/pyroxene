@@ -6,7 +6,7 @@ import subprocess
 import unittest
 
 from pygti2.device_commands import Gti2SocketCommunicator
-from pygti2.device_proxy import LibProxy
+from pygti2.device_proxy import LibProxy, VarProxy
 from pygti2.elfbackend import ElfBackend
 from pygti2.memory_management import SimpleMemoryManager
 from pygti2.companion_generator import CompanionGenerator
@@ -160,17 +160,25 @@ class TestPyGti2(unittest.TestCase):
             self.assertEqual(result.c, 6)
 
     def test_consts(self):
-        with compile(
-            """
+        src = """
             #include <stdint.h>
             const uint32_t X = 42;
             uint32_t Y = 42;
-            """,
-        ) as lib:
+            #define MAGIC ((int32_t)(-42))
+            """
+        src += CompanionGenerator().parse_and_generate_companion_source(src)
+        with compile(src) as lib:
             self.assertEqual(lib.X, 42)
             self.assertEqual(lib.backend.types["X"].data, (42).to_bytes(4, lib.backend.endian))
+
             self.assertEqual(lib.Y, 42)
             self.assertIsNone(lib.backend.types["Y"].data)
+
+            self.assertEqual(lib.MAGIC, -42)
+            VarProxy.cffi_compatibility_mode = False
+            self.assertIsNotNone(lib.MAGIC.data)
+            self.assertIsNotNone(lib.X.data)
+            VarProxy.cffi_compatibility_mode = True
 
     def test_array_allocation(self):
         with compile("") as lib:
