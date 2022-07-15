@@ -52,8 +52,11 @@ class Gti2Communicactor(Communicator):
             struct.pack("!HH", numbytes_return, len(args)),
             b"".join(self.marshal_long(arg) for arg in args),
         )
+        logging.getLogger(__name__).debug(
+            f"PyGti2Command.call {' '.join(c.hex() for c in callargs)}, {numbytes_return} -> ..."
+        )
         result = self.command(3, b"".join(callargs), numbytes_return)
-        logging.getLogger(__name__).debug(f"PyGti2Command.call {callargs}, {numbytes_return} -> {result}")
+        logging.getLogger(__name__).debug(f"PyGti2Command.call ... -> {result}")
         return self.unmarshal_long(result)
 
     def memory_read(self, addr: int, size: int) -> bytes:
