@@ -93,7 +93,9 @@ class VarProxy:
                     self.type,
                     self.address + index.start * self.type.size,
                     length=index.stop - index.start,
-                    data=self.data[index.start * self.type.size :] if self.data is not None else None,
+                    data=self.data[index.start * self.type.size : index.stop * self.type.size]
+                    if self.data is not None
+                    else None,
                 ).get_value()
             return [self._getitem_single(i) for i in range(index.start, index.stop)]
         else:
