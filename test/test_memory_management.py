@@ -39,11 +39,11 @@ class TestSimpleMemoryManager(unittest.TestCase):
             self.assertEqual(mem.allocated, [(var, 10)])
 
             var2: VarProxy = lib.new("uint8_t *")
-            self.assertEqual(var2.address, lib.heap.address + 10)
+            self.assertEqual(var2.address, lib.heap.address + 16)
             self.assertEqual(mem.allocated, [(var, 10), (var2, 1)])
 
             var3: VarProxy = lib.new("a_t *")
-            self.assertEqual(var3.address, lib.heap.address + 11)
+            self.assertEqual(var3.address, lib.heap.address + 24)
             self.assertEqual(
                 mem.allocated,
                 [(var, 10), (var2, 1), (var3, lib.sizeof(var3))],

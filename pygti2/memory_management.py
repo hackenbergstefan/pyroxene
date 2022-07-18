@@ -7,6 +7,10 @@ from pygti2.device_proxy import LibProxy, VarProxy
 logger = logging.getLogger(__name__)
 
 
+def ceilint(value, multiple=8):
+    return (value + multiple - 1) // multiple * multiple
+
+
 class SimpleMemoryManager:
     def __init__(self, lib: LibProxy, name_of_heap: str = "gti2_memory"):
         self.lib = lib
@@ -47,7 +51,7 @@ class SimpleMemoryManager:
         for var, size in self.allocated:
             if var.address - search_address >= required_size:
                 return search_address
-            search_address = var.address + size
+            search_address = ceilint(var.address + size)
         if self.base_addr + self.max_size - search_address >= required_size:
             return search_address
         raise MemoryError("Out of memory.")
