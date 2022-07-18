@@ -44,7 +44,7 @@ def compile(source: str, source2: str = "", cmdline="gcc -c -g {infile} -o {outf
                     cwd=tmpdir,
                 ).decode()
             )
-        backend = ElfBackend(os.path.join(tmpdir, "src.o"), tolerant=False)
+        backend = ElfBackend(os.path.join(tmpdir, "src.o"))
         if source2:
             backend._create(os.path.join(tmpdir, "src2.o"))
         return backend

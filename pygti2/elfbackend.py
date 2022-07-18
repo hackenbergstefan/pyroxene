@@ -438,14 +438,12 @@ class ElfBackend:
     def __init__(
         self,
         file: str,
-        readelf_binary="readelf",
         compilation_unit_filter=lambda _: True,
-        tolerant: bool = True,
     ):
         self.types = {}
         self.enums = {}
         self.types["void"] = CTypeBaseType(self, "void", 0)
-        self._create(file, readelf_binary, compilation_unit_filter, tolerant)
+        self._create(file, compilation_unit_filter)
         self.types["NULL"] = CTypeVariable(self, "NULL", 0, self.type_from_string("void *"), 0)
 
     def type_from_die(self, die: DIE):
@@ -485,6 +483,7 @@ class ElfBackend:
                 other.update(type)
             return other
         else:
+            logger.debug(f"ElfBackend: Add type {type}")
             self.types[type.typename] = type
             if type.kind in ("struct", "union") and not hasattr(type, "members"):
                 type._create_members(die)
@@ -493,9 +492,7 @@ class ElfBackend:
     def _create(
         self,
         file: str,
-        readelf_binary="readelf",
         compilation_unit_filter=lambda _: True,
-        tolerant=True,
     ):
         with open(file, "rb") as fp:
             self.elffile: ELFFile = ELFFile(fp)
