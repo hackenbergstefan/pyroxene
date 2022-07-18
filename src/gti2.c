@@ -20,11 +20,12 @@ typedef union
 
 static gti2_comdata_t comdata;
 
-const static uint8_t GTI2_OK[2] = "OK";
+const static uint8_t GTI2_ACK[3] = "ACK";
+const static uint8_t GTI2_NCK[3] = "NCK";
 
 static void gti2_dispatch_echo(uint32_t data_length)
 {
-    gti2_write(GTI2_OK, sizeof(GTI2_OK));
+    gti2_write(GTI2_ACK, sizeof(GTI2_ACK));
     gti2_write(comdata.d.data, data_length);
 }
 
@@ -33,10 +34,10 @@ static void gti2_dispatch_memoryread(uint32_t data_length)
     uintptr_t address = ntohl(*(uintptr_t *)comdata.d.data);
     ulong len = ntohl(*(ulong *)&comdata.d.data[sizeof(uintptr_t)]);
     // printf("gti2_dispatch_memoryread 0x%016x %lu\n", address, len);
-    uint8_t *data = alloca(len);
-    memcpy(data, (uint8_t *)address, len);
-    gti2_write(GTI2_OK, sizeof(GTI2_OK));
-    gti2_write(data, len);
+    // uint8_t *data = alloca(len);
+    // memcpy(data, (uint8_t *)address, len);
+    gti2_write(GTI2_ACK, sizeof(GTI2_ACK));
+    gti2_write((uint8_t *)address, len);
 }
 
 static void gti2_dispatch_memorywrite(uint32_t data_length)
@@ -49,7 +50,7 @@ static void gti2_dispatch_memorywrite(uint32_t data_length)
     // }
     // printf("\n");
     memcpy((uint8_t *)address, &comdata.d.data[sizeof(uintptr_t)], data_length - sizeof(uintptr_t));
-    gti2_write(GTI2_OK, sizeof(GTI2_OK));
+    gti2_write(GTI2_ACK, sizeof(GTI2_ACK));
 }
 
 static void gti2_dispatch_call(uint32_t data_length)
@@ -130,7 +131,7 @@ static void gti2_dispatch_call(uint32_t data_length)
     }
     result = ntohl(result);
     // printf("result = %016lx\n", result);
-    gti2_write(GTI2_OK, sizeof(GTI2_OK));
+    gti2_write(GTI2_ACK, sizeof(GTI2_ACK));
     gti2_write((uint8_t *)&result, numbytes_out);
 }
 
@@ -141,6 +142,11 @@ __attribute__((noreturn)) void gti2_dispatcher(void)
         // Read header: cmd[2] | length[2]
         gti2_read(comdata.buffer, 2 + 2);
         uint32_t data_length = (uint32_t)ntoh16(comdata.d.length);
+        if (data_length > sizeof(comdata.buffer) - 4)
+        {
+            gti2_write(GTI2_NCK, sizeof(GTI2_NCK));
+            continue;
+        }
         // Read data
         gti2_read(comdata.buffer + 4, data_length);
 

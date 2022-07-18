@@ -31,6 +31,9 @@ class CommunicatorStub(Communicator):
 
 
 class Gti2Communicactor(Communicator):
+    cmd_max_length = 1024
+    cmd_header_length = 4
+
     def marshal_long(self, x: int) -> bytes:
         return x.to_bytes(self.sizeof_long, "big")
 
@@ -39,10 +42,11 @@ class Gti2Communicactor(Communicator):
 
     def command(self, cmd, data, expected):
         self.write(struct.pack("!HH", cmd, len(data)) + data)
-        response = self.read(2 + expected)
-        if response[:2] != b"OK":
-            raise Exception("Command did not respond sucessfully.")
-        return response[2:]
+        response = self.read(3)
+        if response != b"ACK":
+            raise Exception(f"Command did not respond successfully. response: {response}")
+        response = self.read(expected)
+        return response
 
     def call(self, addr: int, numbytes_return: int, args: List[int]) -> int:
         if numbytes_return > 0:
@@ -73,7 +77,11 @@ class Gti2Communicactor(Communicator):
         if len(data) == 0:
             return
         logging.getLogger(__name__).debug(f"PyGti2Command.memory_write 0x{addr:08x}, {data.hex()}")
-        return self.command(2, self.marshal_long(addr) + data, 0)
+        while len(data) != 0:
+            portion = data[: self.cmd_max_length - self.sizeof_long - self.cmd_header_length]
+            self.command(2, self.marshal_long(addr) + portion, 0)
+            addr += len(portion)
+            data = data[len(portion) :]
 
     def echo(self, data: bytes) -> bytes:
         result = self.command(0, data, len(data))
