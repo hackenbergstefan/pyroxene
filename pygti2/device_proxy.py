@@ -175,6 +175,9 @@ class VarProxy:
             return
         yield from self.__getitem__(slice(0, self.length))
 
+    def __eq__(self, o: "VarProxy") -> bool:
+        return o.address == self.address and o.type == self.type
+
 
 class VarProxyStruct(VarProxy):
     def __getattr__(self, name):
@@ -279,6 +282,9 @@ class FuncProxy:
             self.lib.memory_manager.malloc(var)
             var.set_value(result)
             return var
+
+    def __eq__(self, other: "FuncProxy") -> bool:
+        return self.address == other.address
 
 
 class LibProxy:
