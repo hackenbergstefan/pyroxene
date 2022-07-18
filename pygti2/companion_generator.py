@@ -79,15 +79,6 @@ class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
     def visit_Decl(self, n, *args, **kwargs):
         if isinstance(n.type, pycparser.c_ast.FuncDecl) and n.name in self.companion_generator.unprocessed:
             return self._generate_funcdecl_default(n)
-            params = []
-            for param in n.type.args.params:
-                if param.name is None:
-                    continue
-                elif isinstance(param.type, pycparser.c_ast.PtrDecl):
-                    params.append("NULL")
-                else:
-                    params.append("0")
-            self.stub_calls.append(f"{n.name}({','.join(params)});")
         return ""
 
     def visit_Typedef(self, n):
