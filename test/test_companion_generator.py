@@ -94,12 +94,6 @@ class TestCompanionGenerator(unittest.TestCase):
     def test_ignored(self):
         src = """
             #include <stdint.h>
-            // Functions
-            int func(void);
-            int func(void)
-            {
-                return 0;
-            }
             // Forward declarations
             extern int foo;
             // Declarations

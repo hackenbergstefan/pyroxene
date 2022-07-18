@@ -31,22 +31,25 @@ class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
         self.companion_generator = companion_generator
 
     def _generate_funcdef_default(self, n: pycparser.c_ast.FuncDef):
+        return self._generate_funcdecl_default(n.decl)
+
+    def _generate_funcdecl_default(self, n: pycparser.c_ast.FuncDecl):
         # Patch name
-        functypedecl = n.decl.type
+        functypedecl = n.type
         while not isinstance(functypedecl, pycparser.c_ast.TypeDecl):
             functypedecl = functypedecl.type
-        functypedecl.declname = f"{GTI2_COMPANION_PREFIX}{n.decl.name}"
+        functypedecl.declname = f"{GTI2_COMPANION_PREFIX}{n.name}"
 
         # Read parameters
-        params = ",".join(p.name for p in n.decl.type.args.params if p.name is not None)
+        params = ",".join(p.name for p in n.type.args.params if p.name is not None)
         # Create function definition
-        decl = self.default_generator.visit_FuncDecl(n.decl.type)
+        decl = self.default_generator.visit_FuncDecl(n.type)
         logger.debug(f"InlineFunctionGenerator: Generate {decl}")
         return " ".join(
             (
                 GTI2_COMPANION_FUNC_DECL_FLAGS,
                 decl,
-                f"{{ return {n.decl.name}({params}); }}\n",
+                f"{{ return {n.name}({params}); }}\n",
             )
         )
 
@@ -75,6 +78,7 @@ class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
 
     def visit_Decl(self, n, *args, **kwargs):
         if isinstance(n.type, pycparser.c_ast.FuncDecl) and n.name in self.companion_generator.unprocessed:
+            return self._generate_funcdecl_default(n)
             params = []
             for param in n.type.args.params:
                 if param.name is None:
@@ -93,6 +97,8 @@ class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
         s = ""
         for ext in n.ext:
             if isinstance(ext, pycparser.c_ast.FuncDef):
+                s += self.visit(ext)
+            elif isinstance(ext, pycparser.c_ast.FuncDecl):
                 s += self.visit(ext)
             elif isinstance(ext, pycparser.c_ast.Pragma):
                 result = self.visit(ext)
@@ -213,6 +219,8 @@ class CompanionGenerator:
                 self.preprocessor.add_path(inc)
             for macro in sysmacros:
                 self.preprocessor.define(" ".join(macro))
+        self.preprocessor.define("__builtin_va_list char *")
+        self.preprocessor.define("__asm__(x) ")
 
         for inc in self.include_paths:
             self.preprocessor.add_path(inc)
@@ -277,8 +285,4 @@ class CompanionGenerator:
                 + "".join(f'#include "{inc}"\n' for inc in self.src_files)
                 + self.generate_companion_inlines(parsed)
                 + self.generate_companion_numeric_macros()
-                + '__attribute__((used, section(".gti2.text"))) void _gti2_stubcalls(void) {\n'
-                + "gti2_memory[0] = 0;\n"
-                + "\n".join(self.inline_function_generator.stub_calls)
-                + "\n}"
             )
