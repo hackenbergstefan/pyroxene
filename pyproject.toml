@@ -1,2 +1,6 @@
 [tool.black]
 line-length = 110
+
+[tool.mypy]
+files = "pygti2/*.py"
+mypy_path = "stubs"

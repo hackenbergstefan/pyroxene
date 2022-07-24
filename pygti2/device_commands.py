@@ -4,14 +4,17 @@ from typing import List
 
 
 class Communicator:
+    def __init__(self):
+        self.sizeof_long: int = 0
+
     def memory_read(self, addr: int, size: int) -> bytes:
-        raise NotImplementedError("Abstract.")
+        ...
 
     def memory_write(self, addr: int, data: bytes) -> None:
-        raise NotImplementedError("Abstract.")
+        ...
 
     def call(self, addr: int, numbytes_return: int, args: List[int]) -> int:
-        raise NotImplementedError("Abstract.")
+        ...
 
 
 class CommunicatorStub(Communicator):
@@ -85,14 +88,14 @@ class Gti2Communicactor(Communicator):
 
     def echo(self, data: bytes) -> bytes:
         result = self.command(0, data, len(data))
-        logging.getLogger(__name__).debug(f"PyGti2Command.echo {data} -> {result}")
+        logging.getLogger(__name__).debug(f"PyGti2Command.echo {data!r} -> {result!r}")
         return result
 
 
 class Gti2SerialCommunicator(Gti2Communicactor):
     def __init__(self, port, baud, sizeof_long):
         self.sizeof_long = sizeof_long
-        import serial
+        import serial  # type: ignore[import]
 
         self.ser = serial.Serial(port, baud)
         while True:

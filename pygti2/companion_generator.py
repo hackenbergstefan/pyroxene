@@ -4,10 +4,10 @@ import os
 import re
 import subprocess
 
-from pcpp.preprocessor import Preprocessor
-import pycparser
-import pycparser.c_ast
-import pycparser.c_generator
+from pcpp.preprocessor import Preprocessor  # type: ignore[import]
+import pycparser  # type: ignore[import]
+import pycparser.c_ast  # type: ignore[import]
+import pycparser.c_generator  # type: ignore[import]
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,6 @@ class InlineFunctionGenerator(pycparser.c_generator.CGenerator):
     def __init__(self, companion_generator: "CompanionGenerator"):
         super().__init__()
         self.default_generator = pycparser.c_generator.CGenerator()
-        self.stub_calls = []
         self.companion_generator = companion_generator
 
     def _generate_funcdef_default(self, n: pycparser.c_ast.FuncDef):

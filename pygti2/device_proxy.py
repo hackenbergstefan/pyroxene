@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Type, Union, cast
 
 from .companion_generator import GTI2_COMPANION_PREFIX, GTI2_COMPANION_PREFIX_PTR
 from .device_commands import Communicator
@@ -29,13 +29,13 @@ class VarProxy:
             raise TypeError("Only pointer or arrays can be created.")
 
         if type.kind == "array":
-            length = type.length
-        return VarProxy.new2(backend, com, type.base, address, length, data)
+            length = cast(CTypeArray, type).length
+        return VarProxy.new2(backend, com, type.base, address, length, data)  # type: ignore[attr-defined]
 
     @staticmethod
     def new2(backend: ElfBackend, com: Communicator, type: CType, address: int, length: int = -1, data=None):
         if type.kind in ("struct", "typedef struct"):
-            cls = VarProxyStruct
+            cls: Type[Union[VarProxy, VarProxyStruct]] = VarProxyStruct
         else:
             cls = VarProxy
         return cls(backend, com, type, address, length, data)
@@ -175,8 +175,10 @@ class VarProxy:
             return
         yield from self.__getitem__(slice(0, self.length))
 
-    def __eq__(self, o: "VarProxy") -> bool:
-        return o.address == self.address and o.type == self.type
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, VarProxy):
+            raise TypeError(f"Not a VarProxy: {other}")
+        return other.address == self.address and other.type == self.type
 
 
 class VarProxyStruct(VarProxy):
@@ -215,11 +217,18 @@ class FuncProxy:
 
     __slots__ = ("lib", "backend", "com", "type", "address")
 
-    def __init__(self, lib: "LibProxy", backend: ElfBackend, com: Communicator, type: CType, address: int):
+    def __init__(
+        self,
+        lib: "LibProxy",
+        backend: ElfBackend,
+        com: Communicator,
+        type: CTypeFunction,
+        address: int,
+    ):
         self.lib = lib
         self.backend = backend
         self.com = com
-        self.type: CTypeFunction = type
+        self.type = type
         self.address = address
 
     def __call__(self, *args):
@@ -283,7 +292,9 @@ class FuncProxy:
             var.set_value(result)
             return var
 
-    def __eq__(self, other: "FuncProxy") -> bool:
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, FuncProxy):
+            raise TypeError(f"Not a FuncProxy: {other}")
         return self.address == other.address
 
 
@@ -337,8 +348,10 @@ class LibProxy:
     def _new(self, type: Union[CType, str], address: int, *args, defer_set=False):
         length = -1
         if isinstance(type, str):
-            type = self.backend.type_from_string(type)
+            type = self.backend.type_from_string(type)  # type: ignore[no-redef]
+            type = cast(CType, type)
             if type.kind == "array":
+                type = cast(CTypeArray, type)
                 if type.length > 0:
                     length = type.length
                 elif len(args) == 1 and isinstance(args[0], (list, bytes)):

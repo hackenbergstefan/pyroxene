@@ -1,16 +1,17 @@
 import logging
 import re
+from typing import Dict, Literal, Optional, Type
 
-from elftools.dwarf.dwarfinfo import DWARFInfo
-from elftools.dwarf.dwarf_expr import DW_OP_opcode2name
-from elftools.dwarf.descriptions import _DESCR_DW_ATE
-from elftools.dwarf.die import DIE
-from elftools.elf.elffile import ELFFile
+from elftools.dwarf.dwarfinfo import DWARFInfo  # type: ignore[import]
+from elftools.dwarf.dwarf_expr import DW_OP_opcode2name  # type: ignore[import]
+from elftools.dwarf.descriptions import _DESCR_DW_ATE  # type: ignore[import]
+from elftools.dwarf.die import DIE  # type: ignore[import]
+from elftools.elf.elffile import ELFFile  # type: ignore[import]
 
 logger = logging.getLogger(__name__)
 
 
-def loc2addr(die: DIE):
+def loc2addr(die: DIE) -> Optional[int]:
     if "DW_AT_location" not in die.attributes:
         return None
     addr = die.attributes["DW_AT_location"].value
@@ -28,13 +29,14 @@ def dw_at_encoding(die: DIE):
 
 
 class CType:
-    def __init__(self, backend: "ElfBackend", typename: str, size: int):
+    def __init__(self, backend: "ElfBackend", typename: str, size: int, **kwargs):
         self.backend = backend
         self.kind = "none"
         self.typename = typename
         self.size = size
 
-    def fromdie(cls, backend: "ElfBackend", die: DIE, *args, **kwargs) -> "CType":
+    @staticmethod
+    def fromdie_cls(cls: Type["CType"], backend: "ElfBackend", die: DIE, **kwargs):
         if die and "DW_AT_name" in die.attributes:
             typename = die.attributes["DW_AT_name"].value.decode()
         else:
@@ -45,7 +47,7 @@ class CType:
         else:
             size = -1
 
-        return cls(backend=backend, typename=typename, size=size, *args, **kwargs)
+        return cls(backend=backend, typename=typename, size=size, **kwargs)
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, CType):
@@ -62,15 +64,19 @@ class CTypeBaseType(CType):
     Types with tag "DW_TAG_base_type"
     """
 
-    @classmethod
-    def fromdie(cls, backend: "ElfBackend", die: DIE) -> "CTypeBaseType":
+    def __init__(self, backend, typename, size, signed: bool = False):
+        super().__init__(backend, typename, size)
+        self.signed = signed
+
+    @staticmethod
+    def fromdie(backend: "ElfBackend", die: DIE, **kwargs) -> "CTypeBaseType":
         encoding = dw_at_encoding(die)
         if encoding in ("(unsigned)", "(unsigned char)", "(boolean)"):
-            return CType.fromdie(CTypeBaseInt, backend, die)
+            return CType.fromdie_cls(CTypeBaseInt, backend, die)
         elif encoding in ("(signed)", "(signed char)"):
-            return CType.fromdie(CTypeBaseInt, backend, die, signed=True)
+            return CType.fromdie_cls(CTypeBaseInt, backend, die, signed=True)
         elif encoding in ("(float)",):
-            return CType.fromdie(CTypeBaseFloat, backend, die)
+            return CType.fromdie_cls(CTypeBaseFloat, backend, die)
         else:
             raise NotImplementedError(f"Unkown encoding: {encoding}")
 
@@ -81,9 +87,8 @@ class CTypeBaseInt(CTypeBaseType):
     """
 
     def __init__(self, backend, typename, size, signed: bool = False):
-        super().__init__(backend, typename, size)
+        super().__init__(backend, typename, size, signed=signed)
         self.kind = "int"
-        self.signed = signed
         logger.debug("New " + repr(self))
 
 
@@ -93,7 +98,7 @@ class CTypeBaseFloat(CTypeBaseType):
     """
 
     def __init__(self, backend, typename, size):
-        super().__init__(backend, typename, size)
+        super().__init__(backend, typename, size, False)
         self.kind = "float"
         logger.debug("New " + repr(self))
 
@@ -107,8 +112,8 @@ class CTypePointer(CType):
         self.base = base
         logger.debug("New " + repr(self))
 
-    @classmethod
-    def fromdie(cls, backend: "ElfBackend", die: DIE) -> "CTypePointer":
+    @staticmethod
+    def fromdie(backend: "ElfBackend", die: DIE, **kwargs) -> "CTypePointer":
         if "DW_AT_type" not in die.attributes:
             return CTypePointer(backend, "void *", 0, backend.type_from_string("void"))
         basedie = die.get_DIE_from_attribute("DW_AT_type")
@@ -117,7 +122,7 @@ class CTypePointer(CType):
             base = backend.type_from_die(basedie.get_DIE_from_attribute("DW_AT_type"))
         if base is None:
             base = backend.types["void"]
-        return CType.fromdie(CTypePointer, backend, die, base=base)
+        return CType.fromdie_cls(CTypePointer, backend, die, base=base)
 
 
 class CTypeArray(CType):
@@ -133,8 +138,8 @@ class CTypeArray(CType):
         self.kind = "array"
         logger.debug("New " + repr(self))
 
-    @classmethod
-    def fromdie(cls, backend: "ElfBackend", die: DIE) -> "CTypeArray":
+    @staticmethod
+    def fromdie(backend: "ElfBackend", die: DIE, **kwargs) -> "CTypeArray":
         base = backend.type_from_die(die.get_DIE_from_attribute("DW_AT_type"))
 
         length = -1
@@ -145,9 +150,11 @@ class CTypeArray(CType):
                 length = child.attributes["DW_AT_upper_bound"].value + 1
                 break
 
-        return CType.fromdie(CTypeArray, backend, die, base=base, length=length)
+        return CType.fromdie_cls(CTypeArray, backend, die, base=base, length=length)
 
-    def update(self, other: "CTypeArray"):
+    def update(self, other):
+        if not isinstance(other, CTypeArray):
+            raise TypeError(f"Not a CTypeArray: {other}")
         if self.length == -1 and other.length != -1:
             self.length = other.length
             self.size = other.size
@@ -161,25 +168,25 @@ class CTypeTypedef(CType):
     Types with tag "DW_TAG_typedef".
     """
 
-    def __init__(self, backend, typename, size, base: CTypeBaseType):
+    def __init__(self, backend, typename, size, base: CType):
         CType.__init__(self, backend, typename, base.size)
         self.base = base
 
-    @classmethod
-    def fromdie(cls, backend: "ElfBackend", die: DIE) -> "CTypeTypedef":
+    @staticmethod
+    def fromdie(backend: "ElfBackend", die: DIE, **kwargs) -> Optional["CTypeTypedef"]:
         if "DW_AT_type" not in die.attributes:
             return None
         base = backend.type_from_die(die.get_DIE_from_attribute("DW_AT_type"))
         if base.kind == "int":
-            return CType.fromdie(CTypeTypedefInt, backend, die, base=base)
+            return CType.fromdie_cls(CTypeTypedefInt, backend, die, base=base)
         elif base.kind == "struct":
-            return CType.fromdie(CTypeTypedefStruct, backend, die, base=base)
+            return CType.fromdie_cls(CTypeTypedefStruct, backend, die, base=base)
         elif base.kind == "pointer":
-            return CType.fromdie(CTypeTypedefPointer, backend, die, base=base)
+            return CType.fromdie_cls(CTypeTypedefPointer, backend, die, base=base)
         elif base.kind == "array":
-            return CType.fromdie(CTypeTypedefArray, backend, die, base=base)
+            return CType.fromdie_cls(CTypeTypedefArray, backend, die, base=base)
         elif base.kind == "union":
-            return CType.fromdie(CTypeTypedefUnion, backend, die, base=base)
+            return CType.fromdie_cls(CTypeTypedefUnion, backend, die, base=base)
         else:
             raise NotImplementedError(f"Unkown base kind: {base}")
 
@@ -192,8 +199,7 @@ class CTypeTypedefInt(CTypeTypedef):
     def __init__(self, backend, typename, size, base: CTypeBaseType):
         super().__init__(backend, typename, size, base)
         self.kind = "int"
-        if hasattr(base, "signed"):
-            self.signed = base.signed
+        self.signed = base.signed if hasattr(base, "signed") else False
         logger.debug("New " + repr(self))
 
 
@@ -202,9 +208,9 @@ class CTypeStruct(CType):
     Types with tag "DW_TAG_structure_type".
     """
 
-    @classmethod
-    def fromdie(cls, backend: "ElfBackend", die: DIE) -> "CTypeStruct":
-        return CType.fromdie(CTypeStruct, backend, die)
+    @staticmethod
+    def fromdie(backend: "ElfBackend", die: DIE, **kwargs) -> "CTypeStruct":
+        return CType.fromdie_cls(CTypeStruct, backend, die)
 
     def __init__(self, backend, typename, size):
         super().__init__(backend, typename, size)
@@ -238,6 +244,10 @@ class CTypeTypedefStruct(CTypeTypedef, CTypeStruct):
     Types with tag "DW_TAG_typedef" and type CTypeStructure.
     """
 
+    @staticmethod
+    def fromdie(backend: "ElfBackend", die: DIE, **kwargs):
+        raise TypeError("Composite types are not defined by a DIE.")
+
     def __init__(self, backend, typename, size, base: CTypeStruct):
         CTypeTypedef.__init__(self, backend, typename, size, base)
         self.kind = "struct"
@@ -252,9 +262,9 @@ class CTypeUnion(CType):
     Types with tag "DW_TAG_union_type".
     """
 
-    @classmethod
-    def fromdie(cls, backend: "ElfBackend", die: DIE) -> "CTypeUnion":
-        return CType.fromdie(CTypeUnion, backend, die)
+    @staticmethod
+    def fromdie(backend: "ElfBackend", die: DIE, **kwargs) -> "CTypeUnion":
+        return CType.fromdie_cls(CTypeUnion, backend, die)
 
     def __init__(self, backend, typename, size):
         super().__init__(backend, typename, size)
@@ -280,6 +290,10 @@ class CTypeTypedefUnion(CTypeTypedef, CTypeUnion):
     Types with tag "DW_TAG_typedef" and type CTypeUnionure.
     """
 
+    @staticmethod
+    def fromdie(backend: "ElfBackend", die: DIE, **kwargs):
+        raise TypeError("Composite types are not defined by a DIE.")
+
     def __init__(self, backend, typename, size, base: CTypeUnion):
         CTypeTypedef.__init__(self, backend, typename, size, base)
         self.kind = "union"
@@ -293,6 +307,10 @@ class CTypeTypedefPointer(CTypeTypedef, CTypePointer):
     Types with tag "DW_TAG_typedef" and type CTypePointer.
     """
 
+    @staticmethod
+    def fromdie(backend: "ElfBackend", die: DIE, **kwargs):
+        raise TypeError("Composite types are not defined by a DIE.")
+
     def __init__(self, backend, typename, size, base: CTypePointer):
         CTypeTypedef.__init__(self, backend, typename, size, base)
         self.kind = "pointer"
@@ -304,12 +322,18 @@ class CTypeTypedefArray(CTypeTypedef, CTypeArray):
     Types with tag "DW_TAG_typedef_type" and type CTypeArray.
     """
 
+    @staticmethod
+    def fromdie(backend: "ElfBackend", die: DIE, **kwargs):
+        raise TypeError("Composite types are not defined by a DIE.")
+
     def __init__(self, backend, typename, size, base: CTypeArray):
         CTypeTypedef.__init__(self, backend, typename, base.size, base)
         self.kind = "array"
         logger.debug("New " + repr(self))
 
-    def update(self, other: "CTypeTypedefArray"):
+    def update(self, other):
+        if not isinstance(other, CTypeTypedefArray):
+            raise TypeError(f"Not a CTypeTypedefArray: {other}")
         if self.size == -1:
             self.size = other.size
             self.base.update(other.base)
@@ -323,9 +347,9 @@ class CTypeEnumeration(CType):
     Types with tag "DW_TAG_enumeration_type".
     """
 
-    @classmethod
-    def fromdie(cls, backend: "ElfBackend", die: DIE) -> "CTypeBaseType":
-        type = CType.fromdie(CTypeEnumeration, backend, die)
+    @staticmethod
+    def fromdie(backend: "ElfBackend", die: DIE, **kwargs) -> "CTypeBaseType":
+        type = CType.fromdie_cls(CTypeEnumeration, backend, die)
         type._create_enums(die)
         return type
 
@@ -349,8 +373,8 @@ class CTypeVariable(CType):
     Types with tag "DW_TAG_variable_type".
     """
 
-    @classmethod
-    def fromdie(cls, backend: "ElfBackend", die: DIE) -> "CTypeVariable":
+    @staticmethod
+    def fromdie(backend: "ElfBackend", die: DIE, **kwargs) -> "CTypeVariable":
         location = None
         data = None
         if "DW_AT_specification" in die.attributes:
@@ -366,7 +390,7 @@ class CTypeVariable(CType):
         type = backend.type_from_die(typedie)
         if location is not None and isconst:
             data = backend.read_memory(location, type.size)
-        return CType.fromdie(CTypeVariable, backend, die, type=type, location=location, data=data)
+        return CType.fromdie_cls(CTypeVariable, backend, die, type=type, location=location, data=data)
 
     def __init__(self, backend, typename, size, type: CType, location: int = None, data: bytes = None):
         super().__init__(backend, typename, size)
@@ -393,8 +417,8 @@ class CTypeFunction(CType):
     Types with tag "DW_TAG_function".
     """
 
-    @classmethod
-    def fromdie(cls, backend: "ElfBackend", die: DIE) -> "CTypeFunction":
+    @staticmethod
+    def fromdie(backend: "ElfBackend", die: DIE, **kwargs) -> Optional["CTypeFunction"]:
         if "DW_AT_low_pc" not in die.attributes:
             # Functions without location are useless
             return None
@@ -408,7 +432,7 @@ class CTypeFunction(CType):
         elif basedie is not None:
             address = basedie.attributes["DW_AT_low_pc"].value
 
-        type = CType.fromdie(CTypeFunction, backend, die, address=address)
+        type = CType.fromdie_cls(CTypeFunction, backend, die, address=address)
         type._create_argument_types(basedie)
         return type
 
@@ -440,15 +464,15 @@ class ElfBackend:
         file: str,
         compilation_unit_filter=lambda _: True,
     ):
-        self.types = {}
-        self.enums = {}
+        self.types: Dict[str, CType] = {}
+        self.enums: Dict[str, int] = {}
         self.types["void"] = CTypeBaseType(self, "void", 0)
         self._create(file, compilation_unit_filter)
         self.types["NULL"] = CTypeVariable(self, "NULL", 0, self.type_from_string("void *"), 0)
 
     def type_from_die(self, die: DIE):
         if die.tag == "DW_TAG_base_type":
-            type = CTypeBaseType.fromdie(self, die)
+            type: Optional[CType] = CTypeBaseType.fromdie(self, die)
         elif die.tag == "DW_TAG_typedef":
             type = CTypeTypedef.fromdie(self, die)
         elif die.tag == "DW_TAG_structure_type":
@@ -480,13 +504,13 @@ class ElfBackend:
         if type.typename in self.types:
             other = self.types[type.typename]
             if hasattr(other, "update"):
-                other.update(type)
+                other.update(type)  # type: ignore[attr-defined]
             return other
         else:
             logger.debug(f"ElfBackend: Add type {type}")
             self.types[type.typename] = type
             if type.kind in ("struct", "union") and not hasattr(type, "members"):
-                type._create_members(die)
+                type._create_members(die)  # type: ignore[attr-defined]
             return type
 
     def _create(
@@ -497,7 +521,7 @@ class ElfBackend:
         with open(file, "rb") as fp:
             self.elffile: ELFFile = ELFFile(fp)
             self.dwarfinfo: DWARFInfo = self.elffile.get_dwarf_info()
-            self.endian: str = "little" if self.dwarfinfo.config.little_endian else "big"
+            self.endian: Literal["little", "big"] = "little" if self.dwarfinfo.config.little_endian else "big"
             self.sizeof_voidp: int = self.dwarfinfo.config.default_address_size
             for cu in self.dwarfinfo.iter_CUs():
                 cuname = cu.get_top_DIE().attributes["DW_AT_name"].value.decode()
@@ -534,7 +558,7 @@ class ElfBackend:
 
         if match.group("base_pointer"):
             base = self.types[match.group("base_pointer")]
-            type = CTypePointer(self, f"{base.typename} *", self.sizeof_voidp, base)
+            type: CType = CTypePointer(self, f"{base.typename} *", self.sizeof_voidp, base)
         elif match.group("base_array"):
             base = self.types[match.group("base_array")]
             type = CTypeArray(
