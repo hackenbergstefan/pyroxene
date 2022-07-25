@@ -3,6 +3,7 @@ from tempfile import TemporaryDirectory
 import os
 import signal
 import subprocess
+import time
 import unittest
 
 from pygti2.device_commands import Gti2SocketCommunicator
@@ -34,6 +35,7 @@ def compile(source: str, print_output=False) -> LibProxy:
             )
         backend = ElfBackend(os.path.join(tmpdir, "prog"))
         p = subprocess.Popen("./prog", cwd=tmpdir)
+        time.sleep(0.1)  # Wait til prog started. TODO: Is there a smarter solution?
         try:
             yield LibProxy(
                 backend,
