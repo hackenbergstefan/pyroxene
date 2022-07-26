@@ -5,7 +5,7 @@
 #include "gti2.h"
 #include "swap.h"
 
-uint8_t gti2_memory[4 * 1024];
+__attribute__((used, section(".gti2.data"))) uint8_t gti2_memory[4 * 1024] = { 0 };
 
 typedef union
 {
