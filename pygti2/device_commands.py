@@ -33,7 +33,7 @@ class CommunicatorStub(Communicator):
             self.memory[addr + i] = b
 
 
-class Gti2Communicactor(Communicator):
+class Gti2Communicator(Communicator):
     cmd_max_length = 1024
     cmd_header_length = 4
 
@@ -92,7 +92,7 @@ class Gti2Communicactor(Communicator):
         return result
 
 
-class Gti2SerialCommunicator(Gti2Communicactor):
+class Gti2SerialCommunicator(Gti2Communicator):
     def __init__(self, port, baud, sizeof_long):
         self.sizeof_long = sizeof_long
         import serial  # type: ignore[import]
@@ -115,7 +115,7 @@ class Gti2SerialCommunicator(Gti2Communicactor):
         self.ser.write(data)
 
 
-class Gti2SocketCommunicator(Gti2Communicactor):
+class Gti2SocketCommunicator(Gti2Communicator):
     def __init__(self, address, sizeof_long):
         self.sizeof_long = sizeof_long
         import socket
