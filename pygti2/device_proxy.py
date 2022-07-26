@@ -20,7 +20,7 @@ def uint2int(value, size):
 class VarProxy:
     """VarProxy behaves like a pointer to its type."""
 
-    __slots__ = ("backend", "com", "type", "address", "length", "data")
+    __slots__ = ("_backend", "_com", "_type", "_address", "_length", "_data")
     cffi_compatibility_mode = True
 
     @staticmethod
@@ -49,34 +49,38 @@ class VarProxy:
         length: int = -1,
         data=None,
     ):
-        self.backend = backend
-        self.com = com
-        self.type = type
-        self.address = address
-        self.length = length
-        self.data = data
+        self._backend = backend
+        self._com = com
+        self._type = type
+        self._address = address
+        self._length = length
+        self._data = data
+
+        if self._type.kind == "array":
+            self._length = cast(CTypeArray, self._type).length
+            self._type = cast(CTypeArray, self._type).base
 
     def __repr__(self) -> str:
-        return f"<{self.__class__.__name__} {self.type}[{self.length}] @ 0x{self.address or 0:08x}>"
+        return f"<{self.__class__.__name__} {self._type}[{self._length}] @ 0x{self._address or 0:08x}>"
 
     def _getitem_single(self, index, content=None):
         newvarproxy = self.new2(
-            self.backend,
-            self.com,
-            self.type,
-            self.address + index * self.type.size,
-            data=self.data[index * self.type.size :] if self.data is not None else None,
+            self._backend,
+            self._com,
+            self._type,
+            self._address + index * self._type.size,
+            data=self._data[index * self._type.size :] if self._data is not None else None,
         )
         if content is None:
             content = newvarproxy.get_value()
         if newvarproxy.is_primitive:
             return content
-        elif self.type.kind == "pointer":
+        elif self._type.kind == "pointer":
             return self.new2(
-                self.backend,
-                self.com,
-                self.type.base,
-                int.from_bytes(content, self.backend.endian),
+                self._backend,
+                self._com,
+                self._type.base,
+                int.from_bytes(content, self._backend.endian),
             )
         elif self.cffi_compatibility_mode:
             return newvarproxy
@@ -88,40 +92,40 @@ class VarProxy:
             if self.is_primitive:
                 # Speed up by reading memory at once
                 return self.new2(
-                    self.backend,
-                    self.com,
-                    self.type,
-                    self.address + index.start * self.type.size,
+                    self._backend,
+                    self._com,
+                    self._type,
+                    self._address + index.start * self._type.size,
                     length=index.stop - index.start,
-                    data=self.data[index.start * self.type.size : index.stop * self.type.size]
-                    if self.data is not None
+                    data=self._data[index.start * self._type.size : index.stop * self._type.size]
+                    if self._data is not None
                     else None,
                 ).get_value()
             return [self._getitem_single(i) for i in range(index.start, index.stop)]
         else:
-            if self.length != -1 and index >= self.length:
+            if self._length != -1 and index >= self._length:
                 raise IndexError()
             return self._getitem_single(index)
 
     def _setitem_single(self, index, data):
         self.new2(
-            self.backend,
-            self.com,
-            self.type,
-            self.address + index * self.type.size,
+            self._backend,
+            self._com,
+            self._type,
+            self._address + index * self._type.size,
         ).set_value(data)
 
     def __setitem__(self, index, data):
         if isinstance(index, slice):
-            if self.length == -1:
+            if self._length == -1:
                 raise TypeError("Sliced access only possible on arrays.")
             if self.is_primitive:
                 if index.stop - index.start != len(data):
                     raise ValueError("Slice does not match length of data.")
                 # Speed up by writing memory at once
-                return self.com.memory_write(
-                    self.address + index.start * self.type.size,
-                    b"".join(d.to_bytes(self.type.size, self.backend.endian) for d in data),
+                return self._com.memory_write(
+                    self._address + index.start * self._type.size,
+                    b"".join(d.to_bytes(self._type.size, self._backend.endian) for d in data),
                 )
             return [self._setitem_single(i, d) for i, d in zip(range(index.start, index.stop), data)]
         else:
@@ -131,10 +135,10 @@ class VarProxy:
         content = self.to_bytes()
         if self.is_primitive:
             values = []
-            for part in junks(content, self.type.size):
-                value = int.from_bytes(part, self.backend.endian)
-                if getattr(self.type, "signed", False) and value >> (8 * self.type.size - 1) != 0:
-                    value = value - int.from_bytes(self.type.size * b"\xff", self.backend.endian) - 1
+            for part in junks(content, self._type.size):
+                value = int.from_bytes(part, self._backend.endian)
+                if getattr(self._type, "signed", False) and value >> (8 * self._type.size - 1) != 0:
+                    value = value - int.from_bytes(self._type.size * b"\xff", self._backend.endian) - 1
                 values.append(value)
             if len(values) == 1:
                 return values[0]
@@ -142,73 +146,83 @@ class VarProxy:
         return content
 
     def set_value(self, data: Union[list, int, "VarProxy"]):
-        if isinstance(data, VarProxy) and self.type.kind == "pointer":
-            data = data.address
+        if isinstance(data, VarProxy) and self._type.kind == "pointer":
+            data = data._address
         elif isinstance(data, int) and data < 0:
-            data = int.from_bytes(self.type.size * b"\xff", self.backend.endian) + data + 1
+            data = int.from_bytes(self._type.size * b"\xff", self._backend.endian) + data + 1
         elif isinstance(data, (list, tuple)):
-            for member, value in zip(getattr(self.type, "members", {}), data):
+            for member, value in zip(getattr(self._type, "members", {}), data):
                 setattr(self, member, value)
             return
-        self.com.memory_write(
-            self.address,
-            data.to_bytes(self.type.size, self.backend.endian),
+        self._com.memory_write(
+            self._address,
+            data.to_bytes(self._type.size, self._backend.endian),
         )
 
     def to_bytes(self, *args):
-        if self.data is not None:
-            return self.data
-        return self.com.memory_read(self.address, self.type.size * (self.length if self.length > 0 else 1))
+        if self._data is not None:
+            return self._data
+        return self._com.memory_read(
+            self._address, self._type.size * (self._length if self._length > 0 else 1)
+        )
 
     @property
     def is_primitive(self):
-        return self.type.kind == "int"
+        return self._type.kind == "int"
 
     def __len__(self):
-        return self.length
+        if self._length < 0:
+            raise TypeError(f"{self} has no length.")
+        return self._length
 
     def __iter__(self):
-        if self.length < 1:
-            return None
-        if self.length == 1:
+        if self._length < 1:
+            raise TypeError(f"{self} has no length.")
+        if self._length == 1:
             yield self[0]
             return
-        yield from self.__getitem__(slice(0, self.length))
+        yield from self.__getitem__(slice(0, self._length))
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, VarProxy):
             raise TypeError(f"Not a VarProxy: {other}")
-        return other.address == self.address and other.type == self.type
+        return other._address == self._address and other._type == self._type
 
 
 class VarProxyStruct(VarProxy):
     def __getattr__(self, name):
-        if name not in self.type.members:
+        if name not in self._type.members:
             raise ValueError(f"Unknown member: {name}")
-        memberoffset, membertype = self.type.members[name]
+        memberoffset, membertype = self._type.members[name]
         memberproxy = VarProxy.new2(
-            self.backend,
-            self.com,
+            self._backend,
+            self._com,
             membertype,
-            self.address + memberoffset,
+            self._address + memberoffset,
         )
         if memberproxy.is_primitive:
             return memberproxy.get_value()
+        elif (
+            memberproxy.cffi_compatibility_mode
+            and memberproxy._length == -1
+            and memberproxy._type.kind in ("pointer", "array")
+        ):
+            return memberproxy[0]
         else:
             return memberproxy
 
     def __setattr__(self, name, data):
         if name in self.__slots__:
             return VarProxy.__setattr__(self, name, data)
-        if name not in self.type.members:
+        if name not in self._type.members:
             raise ValueError(f"Unknown member: {name}")
 
-        memberoffset, membertype = self.type.members[name]
+        memberoffset, membertype = self._type.members[name]
         VarProxy.new2(
-            self.backend,
-            self.com,
+            self._backend,
+            self._com,
             membertype,
-            self.address + memberoffset,
+            self._address + memberoffset,
         ).set_value(data)
 
 
@@ -258,11 +272,11 @@ class FuncProxy:
             if isinstance(arg, int):
                 packed_args.append(arg)
             elif isinstance(arg, VarProxy):
-                packed_args.append(arg.address)
+                packed_args.append(arg._address)
             elif isinstance(arg, bytes):
                 var = self.lib.new("uint8_t[]", len(arg))
                 var[0 : len(arg)] = arg
-                packed_args.append(var.address)
+                packed_args.append(var._address)
             else:
                 raise ValueError(f"Cannot marshal {arg}")
         return packed_args
@@ -329,7 +343,7 @@ class LibProxy:
                 length,
                 data=data,
             )
-            if var.cffi_compatibility_mode and var.length == -1 and var.type.kind == "int":
+            if var.cffi_compatibility_mode and var._length == -1 and var._type.kind == "int":
                 return var[0]
             return var
         if type.kind == "function":
@@ -372,7 +386,7 @@ class LibProxy:
             return
         if len(args) == 1:
             args = args[0]
-        if var.length != -1:
+        if var._length != -1:
             if isinstance(args, (list, tuple, bytes)):
                 for i, a in enumerate(args):
                     var[i] = a
@@ -382,26 +396,26 @@ class LibProxy:
     def new(self, type: Union[CType, str], *args):
         var = self._new(type, 0, *args, defer_set=True)
         self.memory_manager.malloc(var)
-        self.memset(var.address, 0, self.sizeof(var))
+        self.memset(var._address, 0, self.sizeof(var))
         self._set(var, *args)
 
         return var
 
     def memset(self, addr: Union[VarProxy, int], value: int, length: int):
         if isinstance(addr, VarProxy):
-            addr = addr.address
+            addr = addr._address
         self.com.memory_write(addr, length * bytes([value]))
 
     def memmove(self, destination: Union[VarProxy, int], source: Union[VarProxy, int], length: int):
         if isinstance(destination, VarProxy):
-            destination = destination.address
+            destination = destination._address
         if isinstance(source, VarProxy):
-            source = source.address
+            source = source._address
         content = source if isinstance(source, bytes) else self.com.memory_read(source, length)
         self.com.memory_write(destination, content)
 
     def sizeof(self, var: VarProxy):
-        return var.length * var.type.size if var.length != -1 else var.type.size
+        return var._length * var._type.size if var._length != -1 else var._type.size
 
     def addressof(self, var: VarProxy):
-        return var.address
+        return var._address

@@ -61,13 +61,13 @@ class TestPyGti2(unittest.TestCase):
         ) as lib:
             self.assertEqual(lib.sizeof(lib.gti2_memory), 4096)
 
-            var = lib._new("uint8_t *", lib.gti2_memory.address)
+            var = lib._new("uint8_t *", lib.gti2_memory._address)
             self.assertEqual(lib.sizeof(var), 1)
 
-            var = lib._new("uint8_t [10]", lib.gti2_memory.address)
+            var = lib._new("uint8_t [10]", lib.gti2_memory._address)
             self.assertEqual(lib.sizeof(var), 10)
 
-            var = lib._new("uint32_t [10]", lib.gti2_memory.address)
+            var = lib._new("uint32_t [10]", lib.gti2_memory._address)
             self.assertEqual(lib.sizeof(var), 40)
 
     def test_read_write_gti2_memory(self):
@@ -77,7 +77,7 @@ class TestPyGti2(unittest.TestCase):
             """,
         ) as lib:
             mem = lib.gti2_memory
-            self.assertEqual(mem.type.kind, "int")
+            self.assertEqual(mem._type.kind, "int")
 
             # Write and read single value
             mem[0] = 7
@@ -97,7 +97,7 @@ class TestPyGti2(unittest.TestCase):
             a_t _;
             """,
         ) as lib:
-            var = lib._new("uint8_t [10]", lib.gti2_memory.address)
+            var = lib._new("uint8_t [10]", lib.gti2_memory._address)
             lib.memset(lib.gti2_memory, 0, lib.sizeof(lib.gti2_memory))
 
             # Write and read single value
@@ -109,12 +109,12 @@ class TestPyGti2(unittest.TestCase):
             self.assertEqual(var[0:10], 10 * [0xFF])
 
             # Write and read pointer
-            var2 = lib._new("uint8_t **", lib.gti2_memory.address + 16)
+            var2 = lib._new("uint8_t **", lib.gti2_memory._address + 16)
             var2[0] = var
             self.assertEqual(var2[0][0], 0xFF)
 
             # Write and read struct
-            var3 = lib._new("a_t *", lib.gti2_memory.address + 32)
+            var3 = lib._new("a_t *", lib.gti2_memory._address + 32)
             var3.a = var
             self.assertEqual(var3.a, 0xFF)
 
@@ -178,20 +178,20 @@ class TestPyGti2(unittest.TestCase):
 
             self.assertEqual(lib.MAGIC, -42)
             VarProxy.cffi_compatibility_mode = False
-            self.assertIsNotNone(lib.MAGIC.data)
-            self.assertIsNotNone(lib.X.data)
+            self.assertIsNotNone(lib.MAGIC._data)
+            self.assertIsNotNone(lib.X._data)
             VarProxy.cffi_compatibility_mode = True
 
     def test_array_allocation(self):
         with compile("") as lib:
             lib.memory_manager = SimpleMemoryManager(lib)
             var = lib.new("uint8_t[]", 10)
-            self.assertEqual(var.length, 10)
+            self.assertEqual(var._length, 10)
             self.assertEqual(len(var), 10)
             self.assertEqual(var[0:10], 10 * [0])
 
             var = lib.new("uint8_t[]", bytes(range(10)))
-            self.assertEqual(var.length, 10)
+            self.assertEqual(var._length, 10)
             self.assertEqual(len(var), 10)
             self.assertEqual(bytes(var[0:10]), bytes(range(10)))
 

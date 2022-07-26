@@ -18,7 +18,7 @@ class TestSimpleMemoryManager(unittest.TestCase):
             """
         ) as lib:
             mem = lib.memory_manager = SimpleMemoryManager(lib, "heap")
-            self.assertEqual(mem.base_addr, lib.heap.address)
+            self.assertEqual(mem.base_addr, lib.heap._address)
             self.assertEqual(mem.max_size, lib.sizeof(lib.heap))
             self.assertEqual(mem.allocated, [])
 
@@ -35,15 +35,15 @@ class TestSimpleMemoryManager(unittest.TestCase):
         ) as lib:
             mem = lib.memory_manager = SimpleMemoryManager(lib, "heap")
             var: VarProxy = lib.new("uint8_t[10]")
-            self.assertEqual(var.address, lib.heap.address)
+            self.assertEqual(var._address, lib.heap._address)
             self.assertEqual(mem.allocated, [(var, 10)])
 
             var2: VarProxy = lib.new("uint8_t *")
-            self.assertEqual(var2.address, lib.heap.address + 16)
+            self.assertEqual(var2._address, lib.heap._address + 16)
             self.assertEqual(mem.allocated, [(var, 10), (var2, 1)])
 
             var3: VarProxy = lib.new("a_t *")
-            self.assertEqual(var3.address, lib.heap.address + 24)
+            self.assertEqual(var3._address, lib.heap._address + 24)
             self.assertEqual(
                 mem.allocated,
                 [(var, 10), (var2, 1), (var3, lib.sizeof(var3))],
@@ -58,7 +58,7 @@ class TestSimpleMemoryManager(unittest.TestCase):
         ) as lib:
             mem = lib.memory_manager = SimpleMemoryManager(lib, "heap")
             var: VarProxy = lib.new("uint8_t *")
-            self.assertEqual(var.address, lib.heap.address)
+            self.assertEqual(var._address, lib.heap._address)
             self.assertEqual(mem.allocated, [(var, 1)])
             del var
             var2: VarProxy = lib.new("uint8_t *")

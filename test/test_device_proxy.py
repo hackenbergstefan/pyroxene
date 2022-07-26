@@ -19,8 +19,8 @@ class TestDeviceProxyGcc(unittest.TestCase):
             cmdline=self.compiler_cmdline,
         )
         var = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("unsigned int *"), 0)
-        self.assertEqual(var.type, elf.type_from_string("unsigned int"))
-        self.assertEqual(var.address, 0)
+        self.assertEqual(var._type, elf.type_from_string("unsigned int"))
+        self.assertEqual(var._address, 0)
         self.assertEqual(var[0], 0)
         self.assertEqual(var[1], 0)
         var[0] = 1
@@ -49,8 +49,8 @@ class TestDeviceProxyGcc(unittest.TestCase):
         )
         var = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("struct a *"), 0)
         self.assertIsInstance(var, VarProxyStruct)
-        self.assertEqual(var.type, elf.type_from_string("struct a"))
-        self.assertEqual(var.address, 0)
+        self.assertEqual(var._type, elf.type_from_string("struct a"))
+        self.assertEqual(var._address, 0)
         self.assertEqual(var.is_primitive, False)
 
         self.assertEqual(var.x, 0)
@@ -66,9 +66,9 @@ class TestDeviceProxyGcc(unittest.TestCase):
             cmdline=self.compiler_cmdline,
         )
         var = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("unsigned int[1]"), 0)
-        self.assertEqual(var.type, elf.type_from_string("unsigned int"))
-        self.assertEqual(var.address, 0)
-        self.assertEqual(var.length, 1)
+        self.assertEqual(var._type, elf.type_from_string("unsigned int"))
+        self.assertEqual(var._address, 0)
+        self.assertEqual(var._length, 1)
         self.assertEqual(var[0], 0)
         var[0] = 5
         self.assertEqual(var[0], 5)
@@ -79,9 +79,9 @@ class TestDeviceProxyGcc(unittest.TestCase):
             cmdline=self.compiler_cmdline,
         )
         var = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("unsigned int[2]"), 0)
-        self.assertEqual(var.type, elf.type_from_string("unsigned int"))
-        self.assertEqual(var.length, 2)
-        self.assertEqual(var.address, 0)
+        self.assertEqual(var._type, elf.type_from_string("unsigned int"))
+        self.assertEqual(var._length, 2)
+        self.assertEqual(var._address, 0)
         var[0:2] = [1, 2]
         self.assertEqual(var[0:2], [1, 2])
 
@@ -119,28 +119,24 @@ class TestDeviceProxyGcc(unittest.TestCase):
         )
         var = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("b_t *"), 0)
         self.assertIsInstance(var, VarProxyStruct)
-        self.assertEqual(var.type, elf.type_from_string("b_t"))
+        self.assertEqual(var._type, elf.type_from_string("b_t"))
 
         self.assertIsInstance(var.x, VarProxyStruct)
-        self.assertEqual(var.x.type, elf.type_from_string("a_t"))
-        self.assertEqual(var.x.address, 0)
+        self.assertEqual(var.x._type, elf.type_from_string("a_t"))
+        self.assertEqual(var.x._address, 0)
 
         self.assertIsInstance(var.y, VarProxy)
-        self.assertEqual(var.y.type, elf.type_from_string("a_t *"))
-        self.assertEqual(var.y.address, 8)
-
-        self.assertIsInstance(var.y[0], VarProxyStruct)
-        self.assertEqual(var.y[0].type, elf.type_from_string("a_t"))
-        self.assertEqual(var.y[0].address, 0)
+        self.assertEqual(var.y._type, elf.type_from_string("a_t"))
+        self.assertEqual(var.y._address, 0)
 
         var.x.x = 1
         self.assertEqual(var.x.x, 1)
-        var.y[0].x = 2
-        self.assertEqual(var.y[0].x, 2)
+        var.y.x = 2
+        self.assertEqual(var.y.x, 2)
 
         var2 = VarProxy.new(elf, CommunicatorStub(), elf.type_from_string("a_t *"), 16)
         var.y = var2
-        self.assertEqual(var.y[0].address, var2.address)
+        self.assertEqual(var.y._address, var2._address)
 
 
 class TestDeviceProxyGccArm(TestDeviceProxyGcc):

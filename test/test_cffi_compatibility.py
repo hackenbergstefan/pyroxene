@@ -49,6 +49,8 @@ class TestCffiCompatibility(unittest.TestCase):
         inc = """
             typedef struct {
                 int a;
+                int b[3];
+                unsigned char *c;
             } a_t;
             """
         src = """
@@ -72,6 +74,19 @@ class TestCffiCompatibility(unittest.TestCase):
             var_cffi = ffi.new("int [10]")
             self.assertEqual(list(var_cffi), 10 * [0])
             self.assertEqual(list(var_pygti), 10 * [0])
+
+            var_pygti = lib.new("unsigned char [10]")
+            var_cffi = ffi.new("unsigned char [10]")
+            var2_pygti = lib.new("a_t *")
+            var2_pygti.c = var_pygti
+            var2_cffi = ffi.new("a_t *")
+            var2_cffi.c = var_cffi
+            self.assertEqual(bytes(var2_cffi.c[0:10]), 10 * b"\x00")
+            self.assertEqual(bytes(var2_pygti.c[0:10]), 10 * b"\x00")
+            self.assertEqual(bytes(var2_cffi.b), 3 * b"\x00")
+            self.assertEqual(bytes(var2_pygti.b), 3 * b"\x00")
+            self.assertEqual(bytes(var2_cffi.b[0:3]), 3 * b"\x00")
+            self.assertEqual(bytes(var2_pygti.b[0:3]), 3 * b"\x00")
 
     def test_initializer(self):
         inc = """
