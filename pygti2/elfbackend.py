@@ -411,6 +411,11 @@ class CTypeVariable(CType):
             self.type = other.type
             self.data = other.data
 
+        logger.debug("Update " + repr(self))
+
+    def __repr__(self) -> str:
+        return f'<{self.__class__.__name__} "{self.typename}" @ {self.address}>'
+
 
 class CTypeFunction(CType):
     """
@@ -494,6 +499,8 @@ class ElfBackend:
                 type = self.type_from_die(die.get_DIE_from_attribute("DW_AT_type"))
             else:
                 type = self.types["void"]
+        elif die.tag == "DW_TAG_volatile_type":
+            type = self.type_from_die(die.get_DIE_from_attribute("DW_AT_type"))
         else:
             return None
 
