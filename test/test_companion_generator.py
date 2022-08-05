@@ -1,6 +1,6 @@
 import unittest
 
-from pygti2.companion_generator import CompanionGenerator
+from pygti2.companion_generator import CompanionCodeGenerator, generate_companion
 
 from .test_gti2 import compile
 
@@ -22,7 +22,9 @@ class TestCompanionGenerator(unittest.TestCase):
                 return "abc";
             }
             """
-        src += "\n" + CompanionGenerator().parse_and_generate_companion_source(src)
+        gen = CompanionCodeGenerator([], [], [], inline_src=src)
+        gen.preprocess()
+        src += generate_companion(gen)
         with compile(src) as lib:
             self.assertEqual(lib._gti2_func1(), 42)
             self.assertEqual(lib.func1(), 42)
@@ -57,7 +59,9 @@ class TestCompanionGenerator(unittest.TestCase):
                 return "abc";
             }
             """
-        src += CompanionGenerator().parse_and_generate_companion_source(src)
+        gen = CompanionCodeGenerator([], [], [], inline_src=src)
+        gen.preprocess()
+        src += generate_companion(gen)
         with compile(src) as lib:
             self.assertIn("_gti2_func1", lib.backend.types)
             self.assertIn("_gti2_ptr_func1", lib.backend.types)
@@ -73,7 +77,9 @@ class TestCompanionGenerator(unittest.TestCase):
             #define MACRO_3 (41 == 41)
             #define MACRO_4() (41 == 41)
             """
-        src += "\n" + CompanionGenerator().parse_and_generate_companion_source(src)
+        gen = CompanionCodeGenerator([], [], [], inline_src=src)
+        gen.preprocess()
+        src += generate_companion(gen)
         with compile(src) as lib:
             self.assertEqual(lib.MACRO_1, 42)
             self.assertEqual(lib.MACRO_2(20, 21), 42)
@@ -86,7 +92,9 @@ class TestCompanionGenerator(unittest.TestCase):
             #define MACRO_1 "abc"
             #define MACRO_2(x) "abc" ## x
             """
-        src += "\n" + CompanionGenerator().parse_and_generate_companion_source(src)
+        gen = CompanionCodeGenerator([], [], [], inline_src=src)
+        gen.preprocess()
+        src += generate_companion(gen)
         with compile(src) as lib:
             self.assertEqual(bytes(lib.MACRO_1[0:3]), b"abc")
             self.assertNotIn("_gti2_MACRO_2", lib.backend.types)
@@ -100,16 +108,20 @@ class TestCompanionGenerator(unittest.TestCase):
             int foo_array[2];
             static int foo = 42;
             """
-        src = CompanionGenerator().parse_and_generate_companion_source(src, bare=True)
-        self.assertEqual(src.strip(), "")
+        gen = CompanionCodeGenerator([], [], [], inline_src=src)
+        gen.preprocess()
+        src = generate_companion(gen)
+        self.assertEqual(src.splitlines()[2:], [])
 
     def test_empty_macro(self):
         src = """
             #include <stdint.h>
             #define JUST_A_DEFINE
             """
-        src = CompanionGenerator().parse_and_generate_companion_source(src, bare=True)
-        self.assertEqual(src.strip(), "")
+        gen = CompanionCodeGenerator([], [], [], inline_src=src)
+        gen.preprocess()
+        src = generate_companion(gen)
+        self.assertEqual(src.splitlines()[2:], [])
 
     def test_statement_macros(self):
         src = """
@@ -122,5 +134,7 @@ class TestCompanionGenerator(unittest.TestCase):
             #define macro_5 { {0} }
             #define macro_6(x) ((x) > 0 ? 1 : 0)
             """
-        src = CompanionGenerator().parse_and_generate_companion_source(src, bare=True)
-        self.assertEqual(src.strip(), "")
+        gen = CompanionCodeGenerator([], [], [], inline_src=src)
+        gen.preprocess()
+        src = generate_companion(gen)
+        self.assertEqual(src.splitlines()[2:], [])

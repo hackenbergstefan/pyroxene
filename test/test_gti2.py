@@ -10,7 +10,7 @@ from pygti2.device_commands import Gti2SocketCommunicator
 from pygti2.device_proxy import LibProxy, VarProxy
 from pygti2.elfbackend import ElfBackend
 from pygti2.memory_management import SimpleMemoryManager
-from pygti2.companion_generator import CompanionGenerator
+from pygti2.companion_generator import CompanionCodeGenerator, generate_companion
 
 
 @contextmanager
@@ -140,7 +140,9 @@ class TestPyGti2(unittest.TestCase):
             b_t func6(uint32_t a, uint32_t b, uint32_t c) { b_t x = { a, b, c }; return x; }
             inline b_t func7(uint32_t a, uint32_t b, uint32_t c) { b_t x = { a, b, c }; return x; }
         """
-        src += CompanionGenerator().parse_and_generate_companion_source(src)
+        gen = CompanionCodeGenerator([], [], [], inline_src=src)
+        gen.preprocess()
+        src += generate_companion(gen)
         with compile(src) as lib:
             lib.memory_manager = SimpleMemoryManager(lib)
             self.assertEqual(lib.func1(), -42)
@@ -168,7 +170,9 @@ class TestPyGti2(unittest.TestCase):
             uint32_t Y = 42;
             #define MAGIC ((int32_t)(-42))
             """
-        src += CompanionGenerator().parse_and_generate_companion_source(src)
+        gen = CompanionCodeGenerator([], [], [], inline_src=src)
+        gen.preprocess()
+        src += generate_companion(gen)
         with compile(src) as lib:
             self.assertEqual(lib.X, 42)
             self.assertEqual(lib.backend.types["X"].data, (42).to_bytes(4, lib.backend.endian))
