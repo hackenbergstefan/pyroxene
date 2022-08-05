@@ -5,9 +5,9 @@ from .device_commands import Communicator
 from .elfbackend import CType, CTypeArray, CTypeFunction, ElfBackend
 
 
-def junks(thelist, junksize):
-    for i in range(0, len(thelist), junksize):
-        yield thelist[i : i + junksize]
+def chunks(thelist, chunksize):
+    for i in range(0, len(thelist), chunksize):
+        yield thelist[i : i + chunksize]
 
 
 def uint2int(value, size):
@@ -135,7 +135,7 @@ class VarProxy:
         content = self.to_bytes()
         if self.is_primitive:
             values = []
-            for part in junks(content, self._type.size):
+            for part in chunks(content, self._type.size):
                 value = int.from_bytes(part, self._backend.endian)
                 if getattr(self._type, "signed", False) and value >> (8 * self._type.size - 1) != 0:
                     value = value - int.from_bytes(self._type.size * b"\xff", self._backend.endian) - 1
