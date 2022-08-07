@@ -321,6 +321,8 @@ class LibProxy:
         self.memory_manager = memory_manager
 
     def __getattr__(self, name):
+        if name in self.__dict__ or name in dir(self) or name in ("__name__", "__file__"):
+            return super().__getattr__(name)
         if name in self.backend.types:
             type = self.backend.types[name]
         elif GTI2_COMPANION_PREFIX + name in self.backend.types:
