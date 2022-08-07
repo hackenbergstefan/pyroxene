@@ -176,8 +176,10 @@ class VarProxy:
         return self._length
 
     def __iter__(self):
-        if self._length < 1:
+        if self._length < 0:
             raise TypeError(f"{self} has no length.")
+        if self._length == 0:
+            return StopIteration()
         if self._length == 1:
             yield self[0]
             return
