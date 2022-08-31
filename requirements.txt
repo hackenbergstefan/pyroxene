@@ -1,7 +1,0 @@
-cffi
-hypothesis
-pcpp
-pycparser
-pygdbmi
-pyserial
-pyelftools
