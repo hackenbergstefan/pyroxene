@@ -3,7 +3,7 @@ import os
 from tempfile import TemporaryDirectory
 import unittest
 
-from pygti2.elfbackend import (
+from pyroxene.elfbackend import (
     CTypeArray,
     CTypeBaseType,
     CTypePointer,

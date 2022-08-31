@@ -1,8 +1,8 @@
 import unittest
 
-from pygti2.companion_generator import CompanionCodeGenerator, generate_companion
+from pyroxene.companion_generator import CompanionCodeGenerator, generate_companion
 
-from .test_gti2 import compile
+from .test_pyroxene import compile
 
 
 class TestCompanionGenerator(unittest.TestCase):
@@ -26,14 +26,14 @@ class TestCompanionGenerator(unittest.TestCase):
         gen.preprocess()
         src += generate_companion(gen)
         with compile(src) as lib:
-            self.assertEqual(lib._gti2_func1(), 42)
+            self.assertEqual(lib._pyroxene_func1(), 42)
             self.assertEqual(lib.func1(), 42)
 
             self.assertEqual(lib.func2(20, 21), 42)
-            self.assertEqual(lib._gti2_func2(20, 21), 42)
+            self.assertEqual(lib._pyroxene_func2(20, 21), 42)
 
             self.assertEqual(bytes(lib.func3()[0:3]), b"abc")
-            self.assertEqual(bytes(lib._gti2_func3()[0:3]), b"abc")
+            self.assertEqual(bytes(lib._pyroxene_func3()[0:3]), b"abc")
 
     def test_inline_functions_returning_struct(self):
         src = """
@@ -63,11 +63,11 @@ class TestCompanionGenerator(unittest.TestCase):
         gen.preprocess()
         src += generate_companion(gen)
         with compile(src) as lib:
-            self.assertIn("_gti2_func1", lib.backend.types)
-            self.assertIn("_gti2_ptr_func1", lib.backend.types)
-            self.assertIn("_gti2_func2", lib.backend.types)
-            self.assertIn("_gti2_ptr_func2", lib.backend.types)
-            self.assertIn("_gti2_func3", lib.backend.types)
+            self.assertIn("_pyroxene_func1", lib.backend.types)
+            self.assertIn("_pyroxene_ptr_func1", lib.backend.types)
+            self.assertIn("_pyroxene_func2", lib.backend.types)
+            self.assertIn("_pyroxene_ptr_func2", lib.backend.types)
+            self.assertIn("_pyroxene_func3", lib.backend.types)
 
     def test_numeric_defines(self):
         src = """
@@ -97,7 +97,7 @@ class TestCompanionGenerator(unittest.TestCase):
         src += generate_companion(gen)
         with compile(src) as lib:
             self.assertEqual(bytes(lib.MACRO_1[0:3]), b"abc")
-            self.assertNotIn("_gti2_MACRO_2", lib.backend.types)
+            self.assertNotIn("_pyroxene_MACRO_2", lib.backend.types)
 
     def test_ignored(self):
         src = """

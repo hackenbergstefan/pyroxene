@@ -1,7 +1,7 @@
 import unittest
-from pygti2.device_commands import CommunicatorStub
+from pyroxene.device_commands import CommunicatorStub
 
-from pygti2.device_proxy import VarProxy, VarProxyStruct
+from pyroxene.device_proxy import VarProxy, VarProxyStruct
 
 from .test_elfbackend import compile
 

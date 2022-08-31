@@ -1,6 +1,6 @@
 from typing import List, Type, Union, cast
 
-from .companion_generator import GTI2_COMPANION_PREFIX, GTI2_COMPANION_PREFIX_PTR
+from .companion_generator import PYROXENE_COMPANION_PREFIX, PYROXENE_COMPANION_PREFIX_PTR
 from .device_commands import Communicator
 from .elfbackend import CType, CTypeArray, CTypeFunction, ElfBackend
 
@@ -250,8 +250,8 @@ class FuncProxy:
     def __call__(self, *args):
         # If return value is too large assume different call structure:
         # Instead: bigstruct = func(args)
-        # Use: void _gti2_ptr_func(bigstruct *, args)
-        if self.type.typename.startswith(GTI2_COMPANION_PREFIX_PTR):
+        # Use: void _pyroxene_ptr_func(bigstruct *, args)
+        if self.type.typename.startswith(PYROXENE_COMPANION_PREFIX_PTR):
             returnvalue = self.lib.new(self.type.arguments[0])
             self.com.call(
                 self.address,
@@ -325,8 +325,8 @@ class LibProxy:
             return super().__getattr__(name)
         if name in self.backend.types:
             type = self.backend.types[name]
-        elif GTI2_COMPANION_PREFIX + name in self.backend.types:
-            type = self.backend.types[GTI2_COMPANION_PREFIX + name]
+        elif PYROXENE_COMPANION_PREFIX + name in self.backend.types:
+            type = self.backend.types[PYROXENE_COMPANION_PREFIX + name]
         else:
             raise TypeError(f"Unknown type: {name}")
 
@@ -351,9 +351,9 @@ class LibProxy:
                 return var[0]
             return var
         if type.kind == "function":
-            # Redirect to "_gti2_ptr" variant if return argument is too big
+            # Redirect to "_pyroxene_ptr" variant if return argument is too big
             if getattr(type.return_type, "size", 0) > 8:
-                type = self.backend.types[GTI2_COMPANION_PREFIX_PTR + name]
+                type = self.backend.types[PYROXENE_COMPANION_PREFIX_PTR + name]
             return FuncProxy(
                 self,
                 self.backend,

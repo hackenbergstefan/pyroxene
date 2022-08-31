@@ -8,9 +8,9 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "gti2.h"
+#include "pyroxene.h"
 
-int gtisocket = 0;
+int pyroxenesocket = 0;
 int server_fd = 0;
 uint8_t socket_buffer[16 * 1024] = { 0 };
 
@@ -21,9 +21,9 @@ static void socket_connect(void)
     int opt = 1;
     int addrlen = sizeof(address);
 
-    if (gtisocket != 0)
+    if (pyroxenesocket != 0)
     {
-        close(gtisocket);
+        close(pyroxenesocket);
     }
     if (server_fd != 0)
     {
@@ -60,7 +60,7 @@ static void socket_connect(void)
         exit(EXIT_FAILURE);
     }
 
-    if ((gtisocket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
+    if ((pyroxenesocket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
     {
         perror("accept");
         exit(EXIT_FAILURE);
@@ -71,24 +71,24 @@ int main(int argc, char const *argv[])
 {
     socket_connect();
 
-    gti2_dispatcher();
+    pyroxene_dispatcher();
 
     return 0;
 }
 
-void gti2_read(uint8_t *buffer, size_t length)
+void pyroxene_read(uint8_t *buffer, size_t length)
 {
-    ssize_t bytesread = read(gtisocket, &buffer[bytesread], length - bytesread);
+    ssize_t bytesread = read(pyroxenesocket, &buffer[bytesread], length - bytesread);
 
     if (bytesread == 0)
     {
         // Socket was closed, reconnect
         socket_connect();
-        ssize_t bytesread = read(gtisocket, &buffer[bytesread], length - bytesread);
+        ssize_t bytesread = read(pyroxenesocket, &buffer[bytesread], length - bytesread);
     }
 }
 
-void gti2_write(const uint8_t *buffer, size_t length)
+void pyroxene_write(const uint8_t *buffer, size_t length)
 {
-    (void)!write(gtisocket, buffer, length);
+    (void)!write(pyroxenesocket, buffer, length);
 }

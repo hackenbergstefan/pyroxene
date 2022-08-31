@@ -2,11 +2,11 @@ import unittest
 
 import hypothesis
 import hypothesis.strategies
-from pygti2.device_proxy import VarProxy
+from pyroxene.device_proxy import VarProxy
 
-from pygti2.memory_management import SimpleMemoryManager
+from pyroxene.memory_management import SimpleMemoryManager
 
-from .test_gti2 import compile
+from .test_pyroxene import compile
 
 
 class TestSimpleMemoryManager(unittest.TestCase):

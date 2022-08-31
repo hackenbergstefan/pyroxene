@@ -6,11 +6,11 @@ import subprocess
 import time
 import unittest
 
-from pygti2.device_commands import Gti2SocketCommunicator
-from pygti2.device_proxy import LibProxy, VarProxy
-from pygti2.elfbackend import ElfBackend
-from pygti2.memory_management import SimpleMemoryManager
-from pygti2.companion_generator import CompanionCodeGenerator, generate_companion
+from pyroxene.device_commands import PyroxeneSocketCommunicator
+from pyroxene.device_proxy import LibProxy, VarProxy
+from pyroxene.elfbackend import ElfBackend
+from pyroxene.memory_management import SimpleMemoryManager
+from pyroxene.companion_generator import CompanionCodeGenerator, generate_companion
 
 
 @contextmanager
@@ -23,7 +23,7 @@ def compile(source: str, print_output=False) -> LibProxy:
 
         subprocess.check_call(
             "gcc -O2 -static -g -Wl,--no-gc-sections src.c".split(" ")
-            + f"{root}/src/gti2.c {root}/test/host/main.c -I{root}/src -o prog".split(" "),
+            + f"{root}/src/pyroxene.c {root}/test/host/main.c -I{root}/src -o prog".split(" "),
             cwd=tmpdir,
         )
         if print_output:
@@ -39,7 +39,7 @@ def compile(source: str, print_output=False) -> LibProxy:
         try:
             yield LibProxy(
                 backend,
-                Gti2SocketCommunicator(("localhost", 9999), backend.sizeof_voidp),
+                PyroxeneSocketCommunicator(("localhost", 9999), backend.sizeof_voidp),
             )
         except:  # noqa: E722 do not use bare except
             p.send_signal(signal.SIGTERM)
@@ -52,31 +52,31 @@ def compile(source: str, print_output=False) -> LibProxy:
             p.kill()
 
 
-class TestPyGti2(unittest.TestCase):
+class TestPyroxene(unittest.TestCase):
     def test_sizeof(self):
         with compile(
             """
             #include <stdint.h>
             """,
         ) as lib:
-            self.assertEqual(lib.sizeof(lib.gti2_memory), 4096)
+            self.assertEqual(lib.sizeof(lib.pyroxene_memory), 4096)
 
-            var = lib._new("uint8_t *", lib.gti2_memory._address)
+            var = lib._new("uint8_t *", lib.pyroxene_memory._address)
             self.assertEqual(lib.sizeof(var), 1)
 
-            var = lib._new("uint8_t [10]", lib.gti2_memory._address)
+            var = lib._new("uint8_t [10]", lib.pyroxene_memory._address)
             self.assertEqual(lib.sizeof(var), 10)
 
-            var = lib._new("uint32_t [10]", lib.gti2_memory._address)
+            var = lib._new("uint32_t [10]", lib.pyroxene_memory._address)
             self.assertEqual(lib.sizeof(var), 40)
 
-    def test_read_write_gti2_memory(self):
+    def test_read_write_pyroxene_memory(self):
         with compile(
             """
             #include <stdint.h>
             """,
         ) as lib:
-            mem = lib.gti2_memory
+            mem = lib.pyroxene_memory
             self.assertEqual(mem._type.kind, "int")
 
             # Write and read single value
@@ -97,8 +97,8 @@ class TestPyGti2(unittest.TestCase):
             a_t _;
             """,
         ) as lib:
-            var = lib._new("uint8_t [10]", lib.gti2_memory._address)
-            lib.memset(lib.gti2_memory, 0, lib.sizeof(lib.gti2_memory))
+            var = lib._new("uint8_t [10]", lib.pyroxene_memory._address)
+            lib.memset(lib.pyroxene_memory, 0, lib.sizeof(lib.pyroxene_memory))
 
             # Write and read single value
             var[0] = 7
@@ -109,12 +109,12 @@ class TestPyGti2(unittest.TestCase):
             self.assertEqual(var[0:10], 10 * [0xFF])
 
             # Write and read pointer
-            var2 = lib._new("uint8_t **", lib.gti2_memory._address + 16)
+            var2 = lib._new("uint8_t **", lib.pyroxene_memory._address + 16)
             var2[0] = var
             self.assertEqual(var2[0][0], 0xFF)
 
             # Write and read struct
-            var3 = lib._new("a_t *", lib.gti2_memory._address + 32)
+            var3 = lib._new("a_t *", lib.pyroxene_memory._address + 32)
             var3.a = var
             self.assertEqual(var3.a, 0xFF)
 

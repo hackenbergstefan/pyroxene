@@ -1,7 +1,7 @@
-[![lint](https://github.com/hackenbergstefan/pygti2/actions/workflows/lint.yml/badge.svg)](https://github.com/hackenbergstefan/pygti2/actions/workflows/lint.yml)
-[![test](https://github.com/hackenbergstefan/pygti2/actions/workflows/test.yml/badge.svg)](https://github.com/hackenbergstefan/pygti2/actions/workflows/test.yml)
+[![lint](https://github.com/hackenbergstefan/pyroxene/actions/workflows/lint.yml/badge.svg)](https://github.com/hackenbergstefan/pyroxene/actions/workflows/lint.yml)
+[![test](https://github.com/hackenbergstefan/pyroxene/actions/workflows/test.yml/badge.svg)](https://github.com/hackenbergstefan/pyroxene/actions/workflows/test.yml)
 
-# PyGTI2
+# Pyroxene
 
 ## Introduction
 
@@ -27,7 +27,7 @@ Everything else can be done on a host system!
 flowchart LR
     subgraph Device
         direction TB
-        gti2 --> A(Embedded\nlibrary)
+        pyroxene --> A(Embedded\nlibrary)
     end
     subgraph Host
         direction TB
@@ -37,7 +37,7 @@ flowchart LR
         B(Elffile) --> C(pyelftoos)
         C <--> elfbackend
     end
-    device_commands <--> gti2
+    device_commands <--> pyroxene
 ```
 
 ### Example
@@ -61,28 +61,28 @@ class TestLibrary(unittest.TestCase):
         self.assertEqual(response, 42)
 ```
 
-PyGTI makes this possible!
+Pyroxene makes this possible!
 
-- `lib` is a [pygti2.device_proxy.LibProxy](./pygti2/device_proxy) object.
+- `lib` is a [pyroxene.device_proxy.LibProxy](./pyroxene/device_proxy) object.
 - `LibProxy` "knows" everything about the library by examining the elf-binary.
   So it is able to resolve the address of the exported function `addition`.
-  (`lib.addition` is an object of type `pygti2.device_proxy.FuncProxy`)
+  (`lib.addition` is an object of type `pyroxene.device_proxy.FuncProxy`)
 - Calling that function instructs the `FuncProxy` to convert all arguments to a list of integers (see #Scope).
 - These list is marshaled in `device_commands` and sent to the (embedded) target device.
 - The answer get's un-marshaled and returned to the caller.
 
 ## Scope
 
-- PyGTI2 focuses on libraries written in C.
-- PyGTI2 needs debug information in the compiled elf-file.
-- PyGTI2 supports reading macros currently only using `fromelf`.
-- PyGTI2 makes assumptions about the calling convention of the target architecture:
+- Pyroxene focuses on libraries written in C.
+- Pyroxene needs debug information in the compiled elf-file.
+- Pyroxene supports reading macros currently only using `fromelf`.
+- Pyroxene makes assumptions about the calling convention of the target architecture:
   All arguments which are passed to functions must be compatible to `unsigned long`.
   E.g. A `uint8_t`-value must be passed same as it would be a `uint32_t`.
   For ARM Thumb-2 and x86_64 this holds true.
   In a nutshell: _Everything is `ulong`!_
 
-## PyGTI2 Commands
+## Pyroxene Commands
 
 There are three device commands:
 
@@ -98,6 +98,6 @@ There are three device commands:
 
 ## Limitations (as of now)
 
-- PyGTI2 does not support floating point data types.
-- PyGTI2 does not support target architectures where the size of the address space does not equal the size of `unsigned long`.
-- PyGTI2 does not implement error handling on protocol level.
+- Pyroxene does not support floating point data types.
+- Pyroxene does not support target architectures where the size of the address space does not equal the size of `unsigned long`.
+- Pyroxene does not implement error handling on protocol level.

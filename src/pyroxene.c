@@ -2,10 +2,10 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "gti2.h"
+#include "pyroxene.h"
 #include "swap.h"
 
-__attribute__((used, section(".gti2.data"))) uint8_t gti2_memory[GTI2_HEAP_SIZE] = { 0 };
+__attribute__((used, section(".pyroxene.data"))) uint8_t pyroxene_memory[PYROXENE_HEAP_SIZE] = { 0 };
 
 typedef union
 {
@@ -16,44 +16,44 @@ typedef union
         uint8_t data[];
     } d;
     uint8_t buffer[1024];
-} gti2_comdata_t;
+} pyroxene_comdata_t;
 
-static gti2_comdata_t comdata;
+static pyroxene_comdata_t comdata;
 
-const static uint8_t GTI2_ACK[3] = "ACK";
-const static uint8_t GTI2_NCK[3] = "NCK";
+const static uint8_t PYROXENE_ACK[3] = "ACK";
+const static uint8_t PYROXENE_NCK[3] = "NCK";
 
-static void gti2_dispatch_echo(uint32_t data_length)
+static void pyroxene_dispatch_echo(uint32_t data_length)
 {
-    gti2_write(GTI2_ACK, sizeof(GTI2_ACK));
-    gti2_write(comdata.d.data, data_length);
+    pyroxene_write(PYROXENE_ACK, sizeof(PYROXENE_ACK));
+    pyroxene_write(comdata.d.data, data_length);
 }
 
-static void gti2_dispatch_memoryread(uint32_t data_length)
+static void pyroxene_dispatch_memoryread(uint32_t data_length)
 {
     uintptr_t address = ntohl(*(uintptr_t *)comdata.d.data);
     ulong len = ntohl(*(ulong *)&comdata.d.data[sizeof(uintptr_t)]);
-    // printf("gti2_dispatch_memoryread 0x%016x %lu\n", address, len);
+    // printf("pyroxene_dispatch_memoryread 0x%016x %lu\n", address, len);
     // uint8_t *data = alloca(len);
     // memcpy(data, (uint8_t *)address, len);
-    gti2_write(GTI2_ACK, sizeof(GTI2_ACK));
-    gti2_write((uint8_t *)address, len);
+    pyroxene_write(PYROXENE_ACK, sizeof(PYROXENE_ACK));
+    pyroxene_write((uint8_t *)address, len);
 }
 
-static void gti2_dispatch_memorywrite(uint32_t data_length)
+static void pyroxene_dispatch_memorywrite(uint32_t data_length)
 {
     uintptr_t address = ntohl(*(uintptr_t *)comdata.d.data);
-    // printf("gti2_dispatch_memorywrite 0x%016x", address);
+    // printf("pyroxene_dispatch_memorywrite 0x%016x", address);
     // for (size_t i = 0; i < data_length - sizeof(uintptr_t); i++)
     // {
     //     printf(" %02x", comdata.d.data[sizeof(uintptr_t) + i]);
     // }
     // printf("\n");
     memcpy((uint8_t *)address, &comdata.d.data[sizeof(uintptr_t)], data_length - sizeof(uintptr_t));
-    gti2_write(GTI2_ACK, sizeof(GTI2_ACK));
+    pyroxene_write(PYROXENE_ACK, sizeof(PYROXENE_ACK));
 }
 
-static void gti2_dispatch_call(uint32_t data_length)
+static void pyroxene_dispatch_call(uint32_t data_length)
 {
     uintptr_t address = ntohl(*(uintptr_t *)&comdata.d.data[0]);
 #ifdef __arm__
@@ -62,7 +62,7 @@ static void gti2_dispatch_call(uint32_t data_length)
     uint16_t numbytes_out = ntoh16(*(uint16_t *)&comdata.d.data[sizeof(uintptr_t)]);
     uint16_t numparam_in = ntoh16(*(uint16_t *)&comdata.d.data[sizeof(uintptr_t) + sizeof(uint16_t)]);
 
-    // printf("gti2_dispatch_call 0x%016lx %u %u\n", address, numbytes_out, numparam_in);
+    // printf("pyroxene_dispatch_call 0x%016lx %u %u\n", address, numbytes_out, numparam_in);
 
 #define offset_param1 (sizeof(uintptr_t) + sizeof(uint16_t) + sizeof(uint16_t))
 #define param1 (ntohl(*(ulong *)&comdata.d.data[offset_param1]))
@@ -131,45 +131,45 @@ static void gti2_dispatch_call(uint32_t data_length)
     }
     result = ntohl(result);
     // printf("result = %016lx\n", result);
-    gti2_write(GTI2_ACK, sizeof(GTI2_ACK));
-    gti2_write((uint8_t *)&result, numbytes_out);
+    pyroxene_write(PYROXENE_ACK, sizeof(PYROXENE_ACK));
+    pyroxene_write((uint8_t *)&result, numbytes_out);
 }
 
-__attribute__((noreturn)) void gti2_dispatcher(void)
+__attribute__((noreturn)) void pyroxene_dispatcher(void)
 {
     while (1)
     {
         // Read header: cmd[2] | length[2]
-        gti2_read(comdata.buffer, 2 + 2);
+        pyroxene_read(comdata.buffer, 2 + 2);
         uint32_t data_length = (uint32_t)ntoh16(comdata.d.length);
         if (data_length > sizeof(comdata.buffer) - 4)
         {
-            gti2_write(GTI2_NCK, sizeof(GTI2_NCK));
+            pyroxene_write(PYROXENE_NCK, sizeof(PYROXENE_NCK));
             continue;
         }
         // Read data
-        gti2_read(comdata.buffer + 4, data_length);
+        pyroxene_read(comdata.buffer + 4, data_length);
 
         switch (ntoh16(comdata.d.cmd))
         {
             case 0: // Echo
             {
-                gti2_dispatch_echo(data_length);
+                pyroxene_dispatch_echo(data_length);
                 break;
             }
             case 1: // Read memory [address[4] len[4]]
             {
-                gti2_dispatch_memoryread(data_length);
+                pyroxene_dispatch_memoryread(data_length);
                 break;
             }
             case 2: // Write memory [address[4] data[...]]
             {
-                gti2_dispatch_memorywrite(data_length);
+                pyroxene_dispatch_memorywrite(data_length);
                 break;
             }
             case 3: // Call [address[4] numparam_out[2] numparam_in[2] param_in1[4]? ...]
             {
-                gti2_dispatch_call(data_length);
+                pyroxene_dispatch_call(data_length);
                 break;
             }
             default:

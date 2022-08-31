@@ -2,5 +2,5 @@
 line-length = 110
 
 [tool.mypy]
-files = "pygti2/*.py"
+files = "pyroxene/*.py"
 mypy_path = "stubs"

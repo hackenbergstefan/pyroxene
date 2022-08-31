@@ -2,7 +2,7 @@ import logging
 import sys
 from typing import List, Tuple
 
-from pygti2.device_proxy import LibProxy, VarProxy
+from pyroxene.device_proxy import LibProxy, VarProxy
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ def ceilint(value, multiple=8):
 
 
 class SimpleMemoryManager:
-    def __init__(self, lib: LibProxy, name_of_heap: str = "gti2_memory"):
+    def __init__(self, lib: LibProxy, name_of_heap: str = "pyroxene_memory"):
         self.lib = lib
         var = getattr(lib, name_of_heap)
         self.base_addr = var._address

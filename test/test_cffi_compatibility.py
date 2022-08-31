@@ -5,8 +5,8 @@ import importlib
 import os
 import unittest
 
-from pygti2.memory_management import SimpleMemoryManager
-from .test_gti2 import compile
+from pyroxene.memory_management import SimpleMemoryManager
+from .test_pyroxene import compile
 
 
 def cdef(cdef, src=""):

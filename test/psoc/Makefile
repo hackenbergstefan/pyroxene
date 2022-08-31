@@ -39,7 +39,7 @@ TARGET=CY8CPROTO-062-4343W
 #
 # If APPNAME is edited, ensure to update or regenerate launch
 # configurations for your IDE.
-APPNAME=gti2_test
+APPNAME=pyroxene_test
 
 # Name of toolchain to use. Options include:
 #

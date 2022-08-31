@@ -24,16 +24,16 @@ class CommunicatorStub(Communicator):
 
     def memory_read(self, addr: int, size: int) -> bytes:
         result = bytes([self.memory.get(location, 0) for location in range(addr, addr + size)])
-        logging.getLogger(__name__).debug(f"PyGti2Command.memory_read {addr}, {size} -> {result.hex()}")
+        logging.getLogger(__name__).debug(f"PyroxeneCommand.memory_read {addr}, {size} -> {result.hex()}")
         return result
 
     def memory_write(self, addr: int, data: bytes) -> None:
-        logging.getLogger(__name__).debug(f"PyGti2Command.memory_write {addr}, {data.hex()}")
+        logging.getLogger(__name__).debug(f"PyroxeneCommand.memory_write {addr}, {data.hex()}")
         for i, b in enumerate(data):
             self.memory[addr + i] = b
 
 
-class Gti2Communicator(Communicator):
+class PyroxeneCommunicator(Communicator):
     cmd_max_length = 1024
     cmd_header_length = 4
 
@@ -60,26 +60,26 @@ class Gti2Communicator(Communicator):
             b"".join(self.marshal_long(arg) for arg in args),
         )
         logging.getLogger(__name__).debug(
-            f"PyGti2Command.call {' '.join(c.hex() for c in callargs)}, {numbytes_return} -> ..."
+            f"PyroxeneCommand.call {' '.join(c.hex() for c in callargs)}, {numbytes_return} -> ..."
         )
         result = self.command(3, b"".join(callargs), numbytes_return)
-        logging.getLogger(__name__).debug(f"PyGti2Command.call ... -> {result}")
+        logging.getLogger(__name__).debug(f"PyroxeneCommand.call ... -> {result}")
         return self.unmarshal_long(result)
 
     def memory_read(self, addr: int, size: int) -> bytes:
-        logging.getLogger(__name__).debug(f"PyGti2Command.memory_read 0x{addr:08x}, {size} -> ...")
+        logging.getLogger(__name__).debug(f"PyroxeneCommand.memory_read 0x{addr:08x}, {size} -> ...")
         result = self.command(
             1,
             self.marshal_long(addr) + self.marshal_long(size),
             size,
         )
-        logging.getLogger(__name__).debug(f"PyGti2Command.memory_read ... -> {result.hex()}")
+        logging.getLogger(__name__).debug(f"PyroxeneCommand.memory_read ... -> {result.hex()}")
         return result
 
     def memory_write(self, addr: int, data: bytes) -> None:
         if len(data) == 0:
             return
-        logging.getLogger(__name__).debug(f"PyGti2Command.memory_write 0x{addr:08x}, {data.hex()}")
+        logging.getLogger(__name__).debug(f"PyroxeneCommand.memory_write 0x{addr:08x}, {data.hex()}")
         while len(data) != 0:
             portion = data[: self.cmd_max_length - self.sizeof_long - self.cmd_header_length]
             self.command(2, self.marshal_long(addr) + portion, 0)
@@ -88,11 +88,11 @@ class Gti2Communicator(Communicator):
 
     def echo(self, data: bytes) -> bytes:
         result = self.command(0, data, len(data))
-        logging.getLogger(__name__).debug(f"PyGti2Command.echo {data!r} -> {result!r}")
+        logging.getLogger(__name__).debug(f"PyroxeneCommand.echo {data!r} -> {result!r}")
         return result
 
 
-class Gti2SerialCommunicator(Gti2Communicator):
+class PyroxeneSerialCommunicator(PyroxeneCommunicator):
     def __init__(self, port, baud, sizeof_long):
         self.sizeof_long = sizeof_long
         import serial  # type: ignore[import]
@@ -115,7 +115,7 @@ class Gti2SerialCommunicator(Gti2Communicator):
         self.ser.write(data)
 
 
-class Gti2SocketCommunicator(Gti2Communicator):
+class PyroxeneSocketCommunicator(PyroxeneCommunicator):
     def __init__(self, address, sizeof_long):
         self.sizeof_long = sizeof_long
         import socket

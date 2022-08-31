@@ -44,7 +44,7 @@
 #include "cybsp.h"
 #include "cyhal.h"
 
-#include "gti2.h"
+#include "pyroxene.h"
 
 
 /*******************************************************************************
@@ -69,7 +69,7 @@ void handle_error(void)
 }
 
 
-void gti2_read(uint8_t *buffer, size_t length)
+void pyroxene_read(uint8_t *buffer, size_t length)
 {
     for (size_t i = 0; i < length; i++)
     {
@@ -77,7 +77,7 @@ void gti2_read(uint8_t *buffer, size_t length)
     }
 }
 
-void gti2_write(const uint8_t *buffer, size_t length)
+void pyroxene_write(const uint8_t *buffer, size_t length)
 {
     for (size_t i = 0; i < length; i++)
     {
@@ -107,7 +107,7 @@ int main(void)
     __enable_irq();
 
     cyhal_uart_clear(&cy_retarget_io_uart_obj);
-    gti2_dispatcher();
+    pyroxene_dispatcher();
 }
 
 /* [] END OF FILE */

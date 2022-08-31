@@ -170,10 +170,10 @@ class CompanionCodeGenerator:
         self.macro_collector = MacroCollector(self.preprocessor, self.src_files)
 
 
-GTI2_COMPANION_PREFIX = "_gti2_"
-GTI2_COMPANION_PREFIX_PTR = "_gti2_ptr_"
-GTI2_COMPANION_FUNC_DECL_FLAGS = '__attribute__((noinline, used, section(".gti2.text")))'
-GTI2_COMPANION_CONST_DECL_FLAGS = '__attribute__((used, section(".gti2.rodata")))'
+PYROXENE_COMPANION_PREFIX = "_pyroxene_"
+PYROXENE_COMPANION_PREFIX_PTR = "_pyroxene_ptr_"
+PYROXENE_COMPANION_FUNC_DECL_FLAGS = '__attribute__((noinline, used, section(".pyroxene.text")))'
+PYROXENE_COMPANION_CONST_DECL_FLAGS = '__attribute__((used, section(".pyroxene.rodata")))'
 
 
 class CompanionCGenerator(pycparser.c_generator.CGenerator):
@@ -191,7 +191,7 @@ class CompanionCGenerator(pycparser.c_generator.CGenerator):
         functypedecl = n.type
         while not isinstance(functypedecl, pycparser.c_ast.TypeDecl):
             functypedecl = functypedecl.type
-        functypedecl.declname = f"{GTI2_COMPANION_PREFIX}{n.name}"
+        functypedecl.declname = f"{PYROXENE_COMPANION_PREFIX}{n.name}"
 
         # Read parameters
         params = ",".join(p.name for p in n.type.args.params if p.name is not None)
@@ -200,7 +200,7 @@ class CompanionCGenerator(pycparser.c_generator.CGenerator):
         logger.debug(f"InlineFunctionGenerator: Generate {decl}")
         return " ".join(
             (
-                GTI2_COMPANION_FUNC_DECL_FLAGS,
+                PYROXENE_COMPANION_FUNC_DECL_FLAGS,
                 decl,
                 f"{{ return {n.name}({params}); }}\n",
             )
@@ -214,11 +214,11 @@ class CompanionCGenerator(pycparser.c_generator.CGenerator):
         if returntype == "void":
             return ""
         param_decl = f"{returntype} *_" + ("," + param_decl if param_decl != "void" else "")
-        decl = f"void {GTI2_COMPANION_PREFIX_PTR}{n.decl.name}({param_decl})"
+        decl = f"void {PYROXENE_COMPANION_PREFIX_PTR}{n.decl.name}({param_decl})"
         logger.debug(f"InlineFunctionGenerator: Generate {decl}")
         return " ".join(
             (
-                GTI2_COMPANION_FUNC_DECL_FLAGS,
+                PYROXENE_COMPANION_FUNC_DECL_FLAGS,
                 decl,
                 f"{{*_ = {n.decl.name}({params}); }}\n",
             )
@@ -262,16 +262,16 @@ class CompanionCGenerator(pycparser.c_generator.CGenerator):
 def companion_generate_string_macro(macro):
     logger.debug(f"companion_generate_string_macro: Generate {macro.name}")
     return (
-        f"{GTI2_COMPANION_CONST_DECL_FLAGS} "
-        f"const char {GTI2_COMPANION_PREFIX + macro.name}[] = {macro.name};\n"
+        f"{PYROXENE_COMPANION_CONST_DECL_FLAGS} "
+        f"const char {PYROXENE_COMPANION_PREFIX + macro.name}[] = {macro.name};\n"
     )
 
 
 def companion_generate_numeric_macro(macro):
     logger.debug(f"companion_generate_numeric_macro: Generate {macro.name}")
     return (
-        f"{GTI2_COMPANION_CONST_DECL_FLAGS} "
-        f"const long long {GTI2_COMPANION_PREFIX + macro.name} = {macro.name};\n"
+        f"{PYROXENE_COMPANION_CONST_DECL_FLAGS} "
+        f"const long long {PYROXENE_COMPANION_PREFIX + macro.name} = {macro.name};\n"
     )
 
 
@@ -279,8 +279,8 @@ def companion_generate_function_macro(macro):
     args = ",".join(f"unsigned long {a}" for a in macro.arglist)
     logger.debug(f"companion_generate_function_macro: Generate {macro.name}")
     return (
-        f"{GTI2_COMPANION_FUNC_DECL_FLAGS} unsigned long "
-        f"{GTI2_COMPANION_PREFIX}{macro.name}({args}) "
+        f"{PYROXENE_COMPANION_FUNC_DECL_FLAGS} unsigned long "
+        f"{PYROXENE_COMPANION_PREFIX}{macro.name}({args}) "
         f"{{ return {macro.name}({','.join(macro.arglist)}); }}\n"
     )
 
