@@ -149,5 +149,10 @@ ehthumbs_vista.db
 
 # Python
 __pycache__
-.env
+.env/
+.venv/
 .hypothesis
+*.egg-info/
+
+# PyGTI files
+prog

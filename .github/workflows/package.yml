@@ -10,11 +10,8 @@ jobs:
     - uses: actions/checkout@v2
     - name: Set up Python
       uses: actions/setup-python@v1
-    - name: Install pygti2 and dependencies
+    - name: Build Wheel
       run: |
         sudo apt install gcc-arm-none-eabi
         python -m pip install --upgrade pip
-        pip install .[test]
-    - name: Test
-      run: |
-        python runtests.py -v test/*.py
+        pip wheel .
