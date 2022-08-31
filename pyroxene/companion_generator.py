@@ -316,14 +316,17 @@ def generate_companion(companion_code_generator: CompanionCodeGenerator, ignore:
 
 
 class CDefGenerator(pycparser.c_generator.CGenerator):
-    def __init__(self, raw: str):
+    def __init__(self, raw: str, externs: List[str] = []):
         super().__init__()
         self.default_generator = pycparser.c_generator.CGenerator()
         self.raw = raw
+        self.externs = externs
 
     def visit_Decl(self, n, *args, **kwargs):
-        if isinstance(n.type, pycparser.c_ast.FuncDecl):
-            if n.name and n.name in self.raw:
+        if isinstance(n.type, pycparser.c_ast.FuncDecl) and n.name:
+            if n.name in self.externs:
+                return 'extern "Python+C" ' + super().visit_Decl(n)
+            elif n.name in self.raw:
                 return super().visit_Decl(n)
         else:
             return super().visit_Decl(n)
@@ -349,9 +352,9 @@ class CDefGenerator(pycparser.c_generator.CGenerator):
         return s
 
 
-def generate_cdef(companion_code_generator: CompanionCodeGenerator):
+def generate_cdef(companion_code_generator: CompanionCodeGenerator, externs: List[str] = []):
     parsed = pycparser.CParser().parse(companion_code_generator.preprocessed)
-    parsed = CDefGenerator(companion_code_generator.unprocessed).visit(parsed)
+    parsed = CDefGenerator(companion_code_generator.unprocessed, externs).visit(parsed)
     macros = "\n".join(
         f"#define {m} ..." for m in companion_code_generator.macro_collector.macro_numerics.keys()
     )
