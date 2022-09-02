@@ -23,7 +23,8 @@ def compile(source: str, print_output=False) -> LibProxy:
 
         subprocess.check_call(
             "gcc -O2 -static -g -Wl,--no-gc-sections src.c".split(" ")
-            + f"{root}/src/pyroxene.c {root}/test/host/main.c -I{root}/src -o prog".split(" "),
+            + f"{root}/pyroxene/cshim/pyroxene.c {root}/test/host/main.c".split(" ")
+            + f"-I{root}/pyroxene/cshim -o prog".split(" "),
             cwd=tmpdir,
         )
         if print_output:
