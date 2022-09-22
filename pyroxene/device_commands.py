@@ -115,6 +115,37 @@ class PyroxeneSerialCommunicator(PyroxeneCommunicator):
         self.ser.write(data)
 
 
+class PyroxeneSerialASCIICommunicator(PyroxeneCommunicator):
+    START_OF_CMD_CHARACTER = b"\xff"
+
+    def __init__(self, port, baud, sizeof_long):
+        self.sizeof_long = sizeof_long
+        import serial  # type: ignore[import]
+
+        self.ser = serial.Serial(port, baud)
+        while True:
+            self.ser.read_all()
+            self.ser.timeout = 0.5
+            if self.echo(b"hello") == b"hello":
+                break
+        self.ser.timeout = None
+
+    def read(self, length):
+        if length == 0:
+            return b""
+        while self.ser.read(1) != self.START_OF_CMD_CHARACTER:
+            pass
+
+        data = self.ser.read(2 * length)
+        data = bytes.fromhex(data.decode())
+        if len(data) != length:
+            raise TimeoutError("Device took too long to respond.")
+        return data
+
+    def write(self, data):
+        self.ser.write(b"".join(f"{x:02x}".encode() for x in data))
+
+
 class PyroxeneSocketCommunicator(PyroxeneCommunicator):
     def __init__(self, address, sizeof_long):
         self.sizeof_long = sizeof_long
