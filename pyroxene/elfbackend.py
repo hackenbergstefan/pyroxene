@@ -146,7 +146,9 @@ class CTypeArray(CType):
         for child in die.iter_children():
             if child.tag != "DW_TAG_subrange_type":
                 continue
-            if "DW_AT_upper_bound" in child.attributes:
+            if "DW_AT_upper_bound" in child.attributes and isinstance(
+                child.attributes["DW_AT_upper_bound"].value, int
+            ):
                 length = child.attributes["DW_AT_upper_bound"].value + 1
                 break
 
