@@ -17,9 +17,9 @@ def main():
     parser.add_argument("-o", "--output-directory", type=isdir)
     args = parser.parse_args()
 
-    path = importlib.resources.path("pyroxene", "cshim")
-    for f in ("pyroxene.c", "pyroxene.h", "swap.h"):
-        shutil.copy2(path / f, args.output_directory)
+    with importlib.resources.path("pyroxene", "__init__.py") as path:
+        for f in ("pyroxene.c", "pyroxene.h", "swap.h"):
+            shutil.copy2(path.parents[0] / "cshim" / f, args.output_directory)
 
 
 if __name__ == "__main__":
