@@ -1,6 +1,7 @@
+from typing import List
 import logging
 import struct
-from typing import List
+import time
 
 
 class Communicator:
@@ -93,17 +94,38 @@ class PyroxeneCommunicator(Communicator):
 
 
 class PyroxeneSerialCommunicator(PyroxeneCommunicator):
-    def __init__(self, port, baud, sizeof_long):
+    def __init__(self, port, baud, sizeof_long, initial_timeout=2.0, log_support=True):
         self.sizeof_long = sizeof_long
+        self.log_support = log_support
+
         import serial  # type: ignore[import]
 
         self.ser = serial.Serial(port, baud)
         while True:
+            time.sleep(initial_timeout)
             self.ser.read_all()
-            self.ser.timeout = 0.5
+            self.ser.timeout = initial_timeout
             if self.echo(b"hello") == b"hello":
                 break
         self.ser.timeout = None
+
+    def command(self, cmd, data, expected):
+        if self.log_support:
+            self.write(struct.pack("!HH", cmd, len(data)) + data)
+            while True:
+                response = self.read(3)
+                if response == b"ACK":
+                    response = self.read(expected)
+                    break
+                elif response == b"LOG":
+                    log_len = self.read(2)
+                    log = self.read(int(log_len, 10)).decode().replace("\r", "").replace("\n", "")
+                    print(log)
+                else:
+                    raise Exception(f"Command did not respond successfully. response: {response}")
+            return response
+        else:
+            return super().command(cmd, data, expected)
 
     def read(self, length):
         data = self.ser.read(length)
